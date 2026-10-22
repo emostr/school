@@ -1,0 +1,649 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Школа ─────────────────────────────────────────────────────────────────
+// Платформа ставится на сервер одной школы, поэтому строка здесь ровно одна.
+// Модуль тестов перенесён из многошкольной версии и по-прежнему держит школу
+// в условии каждого запроса — граница остаётся, просто она одна.
+
+model School {
+  id        String @id @default(cuid())
+  name      String @default("")
+  shortName String @default("")
+  address   String @default("")
+  timezone  String @default("Europe/Moscow")
+  // Пять или шесть учебных дней в неделе.
+  weekDays  Int    @default(5)
+  // Расписание звонков: [{ "number": 1, "start": "08:30", "end": "09:15" }].
+  bells     Json   @default("[]")
+  // Прочие настройки, которые не стоят отдельной колонки.
+  settings  Json   @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts    Account[]
+  classes     SchoolClass[]
+  tests       Test[]
+  assignments Assignment[]
+  mediaFiles  MediaFile[]
+}
+
+// ─── Учётные записи ────────────────────────────────────────────────────────
+// Ролей нет — есть набор привилегий. Завуч может одновременно вести уроки и
+// классное руководство; классный руководитель — это не привилегия, а связь
+// учителя с классом (SchoolClass.homeroomId).
+
+enum Privilege {
+  // Ученик: видит своё расписание, задания, конспекты и посещаемость.
+  STUDENT
+  // Доверенный ученик: публикует задания и конспекты своего класса.
+  TRUSTED
+  // Учитель: свои уроки, посещаемость по своим предметам, тесты.
+  TEACHER
+  // Завуч: всё по школе, заводит учётные записи. Второй фактор обязателен.
+  HEAD
+}
+
+model Account {
+  id         String      @id @default(cuid())
+  login      String      @unique
+  // Системный администратор: настраивает школу и заводит завучей. Учебных
+  // данных не видит, работает только в админке. Второй фактор обязателен.
+  isAdmin    Boolean     @default(false)
+  privileges Privilege[]
+
+  lastName   String @default("")
+  firstName  String @default("")
+  middleName String @default("")
+  // «Фамилия Имя Отчество» — хранится готовым: по нему сортируют и ищут.
+  fullName   String
+  // Предмет учителя в подписи («учитель математики»), необязательно.
+  subject    String @default("")
+
+  schoolId String?
+  school   School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  passwordHash       String
+  // Пока true, дальше экрана смены пароля учётная запись не идёт.
+  mustChangePassword Boolean @default(true)
+
+  totpSecret  String?
+  totpEnabled Boolean @default(false)
+
+  // Тема, вид уведомлений и прочее, что пользователь выбирает себе сам.
+  preferences Json @default("{}")
+
+  // Заблокированная запись не входит, но её история остаётся на месте.
+  blockedAt   DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  sessions         AuthSession[]
+  backupCodes      BackupCode[]
+  memberships      Student[]
+  homeroomClasses  SchoolClass[]     @relation("Homeroom")
+  createdClasses   SchoolClass[]     @relation("ClassCreator")
+  lessons          ScheduleLesson[]
+  scheduleChanges  ScheduleChange[]  @relation("ChangeTeacher")
+  scheduleVersions ScheduleVersion[]
+  changesMade      ScheduleChange[]  @relation("ChangeAuthor")
+  homework         Homework[]
+  homeworkTemplates HomeworkTemplate[]
+  notes            Note[]
+  attachments      Attachment[]
+  attendanceMarks  Attendance[]
+  tests            Test[]
+  sharesGiven      TestShare[]       @relation("ShareOwner")
+  sharesGot        TestShare[]       @relation("ShareTarget")
+  assignments      Assignment[]
+  checkedWorks     Work[]
+  uploads          MediaFile[]
+
+  @@index([schoolId])
+  @@index([deletedAt])
+}
+
+model BackupCode {
+  id        String    @id @default(cuid())
+  accountId String
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([accountId])
+}
+
+model AuthSession {
+  id         String    @id @default(cuid())
+  accountId  String
+  account    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  lastSeenAt DateTime  @default(now())
+  userAgent  String    @default("")
+  ip         String    @default("")
+  revokedAt  DateTime?
+
+  @@index([accountId])
+  @@index([expiresAt])
+}
+
+// ─── Классы и ученики ──────────────────────────────────────────────────────
+
+model SchoolClass {
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  number      Int // 1..11
+  letter      String // А..Я
+  homeroomId  String?
+  homeroom    Account?  @relation("Homeroom", fields: [homeroomId], references: [id], onDelete: SetNull)
+  createdById String?
+  createdBy   Account?  @relation("ClassCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  archivedAt  DateTime?
+  // Пустая строка у действующего класса, отметка времени — у сданного в архив:
+  // «11А» выпуска 2026 и новый «11А» спокойно живут в одной таблице.
+  archiveKey  String    @default("")
+
+  students         Student[]
+  assignments      Assignment[]
+  scheduleVersions ScheduleVersion[]
+  scheduleChanges  ScheduleChange[]
+  homework         Homework[]
+  notes            Note[]
+  attendance       Attendance[]
+
+  @@unique([schoolId, number, letter, archiveKey])
+  @@index([schoolId, archivedAt])
+}
+
+// Ученик в составе класса. У каждого есть учётная запись; строка с архивной
+// отметкой — это прежнее место ученика, на нём держатся его старые работы.
+model Student {
+  id         String      @id @default(cuid())
+  classId    String
+  class      SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  accountId  String?
+  account    Account?    @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  lastName   String
+  firstName  String
+  // Нормализованное «фамилия|имя» — по нему ищем дубли при импорте списка.
+  searchKey  String
+  // Подгруппа на делёных уроках (иностранный, информатика): "", "1", "2".
+  group      String      @default("")
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  archivedAt DateTime?
+
+  works      Work[]
+  attendance Attendance[]
+
+  @@index([classId, searchKey])
+  @@index([accountId])
+  @@index([archivedAt])
+}
+
+// ─── Справочники ───────────────────────────────────────────────────────────
+
+model Subject {
+  id         String    @id @default(cuid())
+  name       String    @unique
+  // Короткое имя для сетки расписания: «Алгебра», «Рус. яз.».
+  short      String    @default("")
+  createdAt  DateTime  @default(now())
+  archivedAt DateTime?
+
+  lessons    ScheduleLesson[]
+  changes    ScheduleChange[]
+  homework   Homework[]
+  notes      Note[]
+  attendance Attendance[]
+}
+
+model Room {
+  id         String    @id @default(cuid())
+  name       String    @unique
+  note       String    @default("")
+  createdAt  DateTime  @default(now())
+  archivedAt DateTime?
+
+  lessons ScheduleLesson[]
+  changes ScheduleChange[]
+}
+
+// Каникулы и праздники: в эти дни уроков нет, хоть по сетке они и стоят.
+model Holiday {
+  id        String   @id @default(cuid())
+  title     String
+  from      DateTime @db.Date
+  to        DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  @@index([from, to])
+}
+
+// ─── Расписание ────────────────────────────────────────────────────────────
+// Постоянное расписание класса хранится версиями: новая версия действует с
+// даты validFrom до начала следующей. Старые версии и есть архив — по ним
+// видно, как класс учился в любую прошедшую неделю.
+
+model ScheduleVersion {
+  id          String      @id @default(cuid())
+  classId     String
+  class       SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  validFrom   DateTime    @db.Date
+  note        String      @default("")
+  createdById String?
+  createdBy   Account?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime    @default(now())
+
+  lessons ScheduleLesson[]
+
+  @@unique([classId, validFrom])
+}
+
+model ScheduleLesson {
+  id        String          @id @default(cuid())
+  versionId String
+  version   ScheduleVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  // 1 — понедельник … 7 — воскресенье.
+  weekday   Int
+  // Номер урока по расписанию звонков.
+  number    Int
+  // Подгруппа: "" — весь класс, "1"/"2" — делёный урок.
+  group     String          @default("")
+  subjectId String
+  subject   Subject         @relation(fields: [subjectId], references: [id])
+  teacherId String?
+  teacher   Account?        @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  roomId    String?
+  room      Room?           @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  @@index([versionId, weekday, number])
+  @@index([teacherId])
+}
+
+enum ScheduleChangeKind {
+  // Замена: другой предмет, учитель или кабинет.
+  REPLACE
+  // Урок отменён.
+  CANCEL
+  // Дополнительный урок, которого нет в сетке.
+  ADD
+}
+
+// Изменение расписания на конкретную дату. Прошедшие — тоже архив.
+model ScheduleChange {
+  id          String             @id @default(cuid())
+  classId     String
+  class       SchoolClass        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  date        DateTime           @db.Date
+  number      Int
+  group       String             @default("")
+  kind        ScheduleChangeKind
+  subjectId   String?
+  subject     Subject?           @relation(fields: [subjectId], references: [id])
+  teacherId   String?
+  teacher     Account?           @relation("ChangeTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  roomId      String?
+  room        Room?              @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  note        String             @default("")
+  createdById String?
+  createdBy   Account?           @relation("ChangeAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([classId, date, number, group])
+  @@index([date])
+  @@index([teacherId, date])
+}
+
+// ─── Домашние задания ──────────────────────────────────────────────────────
+
+model Homework {
+  id           String      @id @default(cuid())
+  classId      String
+  class        SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId    String
+  subject      Subject     @relation(fields: [subjectId], references: [id])
+  // К какому дню задано: задание видно в этот день у урока предмета.
+  date         DateTime    @db.Date
+  // Номер урока, если в этот день предмет стоит не один раз.
+  lessonNumber Int?
+  group        String      @default("")
+  // Текст из редактора: HTML, очищенный на сервере.
+  content      String      @default("")
+  authorId     String?
+  author       Account?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+
+  attachments Attachment[]
+
+  @@index([classId, date])
+  @@index([subjectId, date])
+}
+
+// Личные заготовки: «§ 12, № 3–5», «выучить правило на с. 40» — чтобы не
+// набирать одно и то же каждую неделю.
+model HomeworkTemplate {
+  id        String   @id @default(cuid())
+  ownerId   String
+  owner     Account  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([ownerId])
+}
+
+// ─── Конспекты ─────────────────────────────────────────────────────────────
+
+enum NoteKind {
+  // Фото доски или PDF — как есть.
+  FILES
+  // Набран в редакторе: текст, формулы, таблицы.
+  RICH
+}
+
+model Note {
+  id           String      @id @default(cuid())
+  classId      String
+  class        SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId    String
+  subject      Subject     @relation(fields: [subjectId], references: [id])
+  date         DateTime    @db.Date
+  lessonNumber Int?
+  title        String
+  kind         NoteKind
+  content      String      @default("")
+  authorId     String?
+  author       Account?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+
+  attachments Attachment[]
+
+  @@index([classId, date])
+  @@index([subjectId, date])
+}
+
+// Вложение к заданию или конспекту: фотография или PDF.
+model Attachment {
+  id         String    @id @default(cuid())
+  // Имя файла в каталоге загрузок.
+  file       String    @unique
+  // Как файл назывался у того, кто его загрузил.
+  name       String
+  mime       String
+  size       Int       @default(0)
+  width      Int       @default(0)
+  height     Int       @default(0)
+  ownerId    String?
+  owner      Account?  @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  homeworkId String?
+  homework   Homework? @relation(fields: [homeworkId], references: [id], onDelete: SetNull)
+  noteId     String?
+  note       Note?     @relation(fields: [noteId], references: [id], onDelete: SetNull)
+  // Порядок в галерее.
+  position   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([homeworkId])
+  @@index([noteId])
+}
+
+// ─── Посещаемость ──────────────────────────────────────────────────────────
+
+enum AttendanceStatus {
+  PRESENT
+  // Болен.
+  SICK
+  // Отсутствует по уважительной причине.
+  EXCUSED
+  // Отсутствует по неуважительной причине.
+  UNEXCUSED
+}
+
+model Attendance {
+  id         String           @id @default(cuid())
+  classId    String
+  class      SchoolClass      @relation(fields: [classId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date       DateTime         @db.Date
+  number     Int
+  subjectId  String?
+  subject    Subject?         @relation(fields: [subjectId], references: [id])
+  status     AttendanceStatus
+  note       String           @default("")
+  markedById String?
+  markedBy   Account?         @relation(fields: [markedById], references: [id], onDelete: SetNull)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([studentId, date, number])
+  @@index([classId, date])
+}
+
+// ─── Тесты ─────────────────────────────────────────────────────────────────
+// Ниже — модуль проверочных работ без изменений: конструктор, бланки,
+// распознавание сканов и журнал оценок.
+
+enum QuestionType {
+  // Один правильный вариант: в бланке одна клетка под букву.
+  SINGLE_CHOICE
+  // Несколько правильных: в бланке несколько клеток под буквы.
+  MULTIPLE_CHOICE
+  // Короткий ответ: слово, число или формула — по клетке на символ.
+  SHORT_ANSWER
+  // Развёрнутый ответ: пишется на отдельном листе, проверяется вручную.
+  EXTENDED
+}
+
+model Test {
+  id           String  @id @default(cuid())
+  schoolId     String
+  school       School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title        String
+  description  String  @default("")
+  // Инструкция печатается на бланке и показывается при выдаче.
+  instructions String  @default("")
+  // Пока тест не опубликован, назначить его классу нельзя.
+  isPublished  Boolean @default(false)
+  // Сколько вариантов у работы. Ученики получают их по очереди,
+  // у каждого варианта свой бланк и свой ключ проверки.
+  variantCount Int     @default(1)
+
+  ownerId   String
+  owner     Account   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Пороги оценок в процентах от максимума: { "5": 85, "4": 70, "3": 50 }.
+  gradeScale Json @default("{\"5\":85,\"4\":70,\"3\":50}")
+
+  questions   Question[]
+  shares      TestShare[]
+  assignments Assignment[]
+
+  @@index([schoolId, deletedAt])
+  @@index([ownerId])
+}
+
+model Question {
+  id      String       @id @default(cuid())
+  testId  String
+  test    Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  order   Int
+  // 0 — задание идёт во все варианты, 1..N — только в свой.
+  variant Int          @default(0)
+  type    QuestionType
+  // Текст задания из визуального редактора: HTML с формулами KaTeX.
+  content String       @default("")
+  points  Int          @default(1)
+
+  // Варианты ответа: [{ id, content }] — порядок задаёт буквы А, Б, В…
+  options Json @default("[]")
+  // Ключ проверки:
+  //   SINGLE_CHOICE   { "correct": ["o1"] }
+  //   MULTIPLE_CHOICE { "correct": ["o1","o3"], "partial": true }
+  //   SHORT_ANSWER    { "accepted": ["Париж"], "caseSensitive": false, "numeric": false, "tolerance": 0 }
+  //   EXTENDED        { "guideline": "что засчитывать" }
+  answerKey Json @default("{}")
+
+  @@index([testId, order])
+  @@index([testId, variant])
+}
+
+// Доступ к чужому тесту: владелец делится им с коллегой из своей школы.
+model TestShare {
+  id        String   @id @default(cuid())
+  testId    String
+  test      Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  ownerId   String
+  owner     Account  @relation("ShareOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  teacherId String
+  teacher   Account  @relation("ShareTarget", fields: [teacherId], references: [id], onDelete: Cascade)
+  // false — коллега только смотрит и назначает, true — ещё и правит.
+  canEdit   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([testId, teacherId])
+  @@index([teacherId])
+}
+
+model Assignment {
+  id          String      @id @default(cuid())
+  schoolId    String
+  school      School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  testId      String
+  test        Test        @relation(fields: [testId], references: [id], onDelete: Cascade)
+  classId     String
+  class       SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  date        DateTime    @db.Date
+  note        String      @default("")
+  createdById String
+  createdBy   Account     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  // Проверка завершена: оценки выставлены и попали в журнал.
+  closedAt    DateTime?
+
+  // Снимок теста на момент выдачи: задания, баллы, ключи и пороги оценок.
+  // Правка теста задним числом не должна менять уже проверенные работы.
+  snapshot Json @default("{}")
+
+  works Work[]
+
+  @@unique([testId, classId, date])
+  @@index([schoolId, date])
+  @@index([classId, date])
+}
+
+enum WorkStatus {
+  // Бланк напечатан, работа ещё не загружена.
+  PENDING
+  // Скан загружен и распознан, но учитель его не подтвердил.
+  RECOGNIZED
+  // Есть задания, которые платформа не проверяет сама.
+  NEEDS_REVIEW
+  // Проверена, оценка выставлена.
+  CHECKED
+}
+
+model Work {
+  id           String     @id @default(cuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String?
+  student      Student?   @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  // Запасной бланк без фамилии подписывается от руки, учитель привяжет ученика сам.
+  studentName  String     @default("")
+  // Код бланка: печатается в углу и читается при загрузке скана.
+  code         String     @unique
+  // Какой вариант достался ученику. У теста без вариантов всегда 1.
+  variant      Int        @default(1)
+  status       WorkStatus @default(PENDING)
+
+  pages ScanPage[]
+
+  // Разбор ответов:
+  // [{ questionId, type, raw, value, correct, score, maxScore, auto, comment, confidence }]
+  answers Json @default("[]")
+
+  autoScore   Int  @default(0)
+  manualScore Int  @default(0)
+  maxScore    Int  @default(0)
+  // Итоговая оценка 2..5 — считается по порогам из снимка теста.
+  grade       Int?
+  percent     Int  @default(0)
+
+  scannedAt   DateTime?
+  checkedAt   DateTime?
+  checkedById String?
+  checkedBy   Account?  @relation(fields: [checkedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([assignmentId, status])
+  @@index([studentId])
+}
+
+model ScanPage {
+  id        String   @id @default(cuid())
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  // Имя файла в каталоге загрузок (UPLOAD_DIR).
+  file      String
+  index     Int      @default(0)
+  width     Int      @default(0)
+  height    Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([workId, index])
+}
+
+enum MediaScope {
+  // Картинка задания теста: видна только учителям — ученики не должны
+  // увидеть чертёж контрольной раньше времени.
+  TEST
+  // Картинка в тексте задания или конспекта: видна всей школе.
+  CONTENT
+}
+
+// Картинки, вставленные в текст визуальным редактором.
+model MediaFile {
+  id        String     @id @default(cuid())
+  schoolId  String?
+  school    School?    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  file      String     @unique
+  mime      String     @default("image/webp")
+  width     Int        @default(0)
+  height    Int        @default(0)
+  size      Int        @default(0)
+  scope     MediaScope @default(TEST)
+  ownerId   String?
+  owner     Account?   @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  createdAt DateTime   @default(now())
+
+  @@index([schoolId])
+  @@index([ownerId])
+}
