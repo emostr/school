@@ -1,0 +1,13 @@
+{
+  "name": "edway.space",
+  "short_name": "edway",
+  "description": "Школьная платформа: расписание, задания, конспекты, посещаемость и тесты",
+  "lang": "ru",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#0078d7",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
