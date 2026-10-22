@@ -95,7 +95,8 @@ const STATUSES: { value: AttendanceStatus; short: string; label: string; tone: s
             <div class="max-w-3xl">
               <div class="mb-4 flex flex-wrap items-center gap-3">
                 <p class="flex-1 text-muted">
-                  {{ longDay(a.date) }}, {{ a.number }}-й урок{{ a.lesson?.subject ? ' · ' + a.lesson?.subject?.name : '' }}{{ a.lesson?.teacher ? ' · ' + a.lesson?.teacher?.fullName : '' }}
+                  @let lesson = a.lesson;
+                  {{ longDay(a.date) }}, {{ a.number }}-й урок{{ lesson?.subject ? ' · ' + lesson!.subject!.name : '' }}{{ lesson?.teacher ? ' · ' + lesson!.teacher!.fullName : '' }}
                 </p>
                 @if (a.canEdit) {
                   <button type="button" class="es-btn es-btn-sm" (click)="allPresent()">все на месте</button>
@@ -186,7 +187,7 @@ const STATUSES: { value: AttendanceStatus; short: string; label: string; tone: s
                       @for (column of s.columns; track column.date) {
                         @for (lesson of column.lessons; track lesson.number) {
                           @let mark = student.marks[column.date + '|' + lesson.number];
-                          <td class="h-7 border-r border-b border-line text-center font-semibold" [class]="cellTone(mark?.status)" [title]="mark?.note ?? ''">
+                          <td class="h-7 border-r border-b border-line text-center font-semibold" [class]="cellTone(mark?.status)" [attr.title]="mark?.note || null">
                             {{ cellText(mark?.status) }}
                           </td>
                         } @empty {
