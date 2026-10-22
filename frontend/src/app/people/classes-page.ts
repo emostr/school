@@ -26,6 +26,8 @@ const LETTERS = 'АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЩЭЮЯ'.split
           <button type="button" class="es-btn" (click)="promoteAll()"><es-icon name="arrowUpRight" [size]="18" /> новый учебный год</button>
           <button type="button" class="es-btn es-btn-primary" (click)="openCreate()"><es-icon name="plus" [size]="18" /> новый класс</button>
         </ng-container>
+      }
+      @if (auth.isHead()) {
         <label class="mb-5 flex w-fit items-center gap-2 text-sm text-muted">
           <input type="checkbox" class="es-switch" [checked]="archived()" (change)="toggleArchived()" /> показывать архив
         </label>
