@@ -59,6 +59,7 @@ export const MathInline = Node.create({
     return `$${String(node.attrs['latex'] ?? '')}$`;
   },
 
+  markdownTokenName: 'inlineMath',
   markdownTokenizer: {
     name: 'inlineMath',
     level: 'inline',
@@ -130,6 +131,7 @@ export const MathBlock = Node.create({
     return ['div', mergeAttributes({ class: 'ng-formula-block', 'data-display': 'true' }, HTMLAttributes)];
   },
 
+  markdownTokenName: 'blockMath',
   markdownTokenizer: {
     name: 'blockMath',
     level: 'block',
