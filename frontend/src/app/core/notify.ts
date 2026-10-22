@@ -19,6 +19,8 @@ export interface Dialog {
   confirmText: string;
   cancelText: string | null;
   danger: boolean;
+  /** Поле ввода — у окна-вопроса «введите…». */
+  input: { value: string; placeholder: string; type: 'text' | 'password' | 'url' } | null;
   resolve: (value: boolean) => void;
 }
 
@@ -89,9 +91,30 @@ export class Notify {
     });
   }
 
-  private open(options: Omit<Dialog, 'id' | 'resolve' | 'danger'> & { danger?: boolean }): Promise<boolean> {
+  /** Окно с полем ввода. null — человек передумал. */
+  async prompt(options: {
+    title: string;
+    message?: string;
+    value?: string;
+    placeholder?: string;
+    type?: 'text' | 'password' | 'url';
+    confirmText?: string;
+  }): Promise<string | null> {
+    const input = { value: options.value ?? '', placeholder: options.placeholder ?? '', type: options.type ?? 'text' };
+    const ok = await this.open({
+      tone: 'info',
+      title: options.title,
+      message: options.message ?? '',
+      confirmText: options.confirmText ?? 'OK',
+      cancelText: 'Отмена',
+      input,
+    });
+    return ok ? input.value : null;
+  }
+
+  private open(options: Omit<Dialog, 'id' | 'resolve' | 'danger' | 'input'> & { danger?: boolean; input?: Dialog['input'] }): Promise<boolean> {
     return new Promise((resolve) => {
-      const dialog: Dialog = { id: ++this.counter, danger: false, ...options, resolve };
+      const dialog: Dialog = { id: ++this.counter, danger: false, input: null, ...options, resolve };
       this.dialogs.update((list) => [...list, dialog]);
     });
   }
