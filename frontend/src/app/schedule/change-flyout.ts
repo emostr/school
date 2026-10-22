@@ -134,10 +134,11 @@ export class ChangeFlyout {
   protected note = '';
 
   constructor() {
-    void Promise.all([this.school.loadSubjects(), this.school.loadStaff(), this.school.loadRooms()]).catch(() => undefined);
     effect(() => {
       const target = this.target();
       if (!target) return;
+      // Справочники нужны только тем, кто правит расписание, — грузим по требованию.
+      void Promise.all([this.school.loadSubjects(), this.school.loadStaff(), this.school.loadRooms()]).catch(() => undefined);
       this.date = target.date;
       this.number = target.number;
       this.note = target.lesson?.note ?? '';
