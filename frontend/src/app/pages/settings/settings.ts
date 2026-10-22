@@ -246,7 +246,12 @@ export class SettingsPage {
   }
 
   protected async disableTotp(): Promise<void> {
-    const password = window.prompt('Чтобы отключить второй фактор, введите пароль');
+    const password = await this.notify.prompt({
+      title: 'Отключить второй фактор?',
+      message: 'Для подтверждения введите пароль',
+      type: 'password',
+      confirmText: 'Отключить',
+    });
     if (!password) return;
     await this.run(async () => {
       this.auth.setProfile(await this.api.post<Profile>('/auth/totp/disable', { password }));
