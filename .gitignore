@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.angular/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+deploy.conf
+backend/src/generated/
+backend/uploads/
+.DS_Store
+.idea/
+.vscode/
+test-results/
+playwright-report/
