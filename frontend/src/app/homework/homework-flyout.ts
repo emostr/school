@@ -227,7 +227,7 @@ export class HomeworkFlyout {
   }
 
   protected async saveTemplate(): Promise<void> {
-    const title = window.prompt('Название заготовки', '');
+    const title = await this.notify.prompt({ title: 'Название заготовки', placeholder: 'например: «§ и номера»' });
     if (!title?.trim()) return;
     try {
       this.personal.set(await this.api.post<HomeworkTemplate[]>('/homework/templates', { title: title.trim(), content: this.content() }));
