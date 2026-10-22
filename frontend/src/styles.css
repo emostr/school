@@ -1,0 +1,786 @@
+@import 'tailwindcss';
+
+/*
+ * edway.space — дизайн-система в духе Metro (Windows 8): плоские плитки,
+ * прямые углы, крупная светлая типографика, один синий акцент. Тёмная тема
+ * по умолчанию, светлая включается в настройках (data-theme="light").
+ */
+
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 300 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url('/fonts/open-sans-normal-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 300 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url('/fonts/open-sans-normal-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 300 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url('/fonts/open-sans-normal-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 300 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url('/fonts/open-sans-normal-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Open Sans';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/open-sans-italic-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Open Sans';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/open-sans-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ─── Токены ────────────────────────────────────────────────────────────── */
+
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+  --es-bg: #121212;
+  --es-surface: #1d1d1d;
+  --es-surface-2: #262626;
+  --es-surface-3: #303030;
+  --es-line: #3b3b3b;
+  --es-line-strong: #5a5a5a;
+  --es-ink: #ffffff;
+  --es-muted: #a8a8a8;
+  --es-faint: #6f6f6f;
+  --es-rail: #0a0a0a;
+  --es-overlay: rgb(0 0 0 / 0.72);
+  --es-accent: #0078d7;
+  --es-accent-hover: #1a8ae6;
+  --es-accent-press: #005ba1;
+  --es-accent-soft: rgb(0 120 215 / 0.18);
+  --es-accent-ink: #ffffff;
+  --es-focus: #ffffff;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --es-bg: #f0f0f0;
+  --es-surface: #ffffff;
+  --es-surface-2: #f6f6f6;
+  --es-surface-3: #e6e6e6;
+  --es-line: #d4d4d4;
+  --es-line-strong: #9a9a9a;
+  --es-ink: #111111;
+  --es-muted: #555555;
+  --es-faint: #8c8c8c;
+  --es-rail: #1d1d1d;
+  --es-overlay: rgb(0 0 0 / 0.5);
+  --es-accent: #0067c0;
+  --es-accent-hover: #0078d7;
+  --es-accent-press: #004e92;
+  --es-accent-soft: rgb(0 103 192 / 0.1);
+  --es-accent-ink: #ffffff;
+  --es-focus: #000000;
+}
+
+@theme inline {
+  --font-sans: 'Open Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'JetBrains Mono', Menlo, monospace;
+
+  /* Скруглений в системе нет вовсе. */
+  --radius-*: initial;
+
+  --color-bg: var(--es-bg);
+  --color-surface: var(--es-surface);
+  --color-surface-2: var(--es-surface-2);
+  --color-surface-3: var(--es-surface-3);
+  --color-line: var(--es-line);
+  --color-line-strong: var(--es-line-strong);
+  --color-ink: var(--es-ink);
+  --color-muted: var(--es-muted);
+  --color-faint: var(--es-faint);
+  --color-rail: var(--es-rail);
+  --color-accent: var(--es-accent);
+  --color-accent-hover: var(--es-accent-hover);
+  --color-accent-press: var(--es-accent-press);
+  --color-accent-soft: var(--es-accent-soft);
+  --color-accent-ink: var(--es-accent-ink);
+
+  /* Палитра Metro для плиток и состояний. */
+  --color-cobalt: #0050ef;
+  --color-cyan: #1ba1e2;
+  --color-teal: #00aba9;
+  --color-steel: #647687;
+  --color-indigo: #3e4fb1;
+  --color-success: #00a300;
+  --color-warning: #e8890c;
+  --color-danger: #e51400;
+  --color-info: #1ba1e2;
+  --color-sick: #8e44ad;
+
+  --animate-slide-in: es-slide-in 0.28s cubic-bezier(0.1, 0.9, 0.2, 1);
+  --animate-fade-in: es-fade-in 0.2s ease-out;
+  --animate-band-in: es-band-in 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+  --animate-turnstile: es-turnstile 0.36s cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+
+@keyframes es-slide-in {
+  from {
+    transform: translateX(110%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes es-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes es-band-in {
+  from {
+    transform: scaleY(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* Входная анимация страниц — «турникет» из Windows 8. */
+@keyframes es-turnstile {
+  from {
+    transform: perspective(1200px) rotateY(-12deg) translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* ─── База ──────────────────────────────────────────────────────────────── */
+
+@layer base {
+  html {
+    background: var(--es-bg);
+    color: var(--es-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--es-bg);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  ::selection {
+    background: var(--es-accent);
+    color: #fff;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--es-focus);
+    outline-offset: 2px;
+  }
+
+  button,
+  [role='button'] {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--es-line-strong) transparent;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ─── Компоненты ────────────────────────────────────────────────────────── */
+
+@layer components {
+  /* Заголовок страницы: крупно, светло, строчными — как в Metro. */
+  .es-title {
+    font-weight: 300;
+    font-size: clamp(30px, 4.2vw, 46px);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+  }
+
+  .es-subtitle {
+    font-weight: 300;
+    font-size: 22px;
+    line-height: 1.2;
+  }
+
+  .es-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--es-muted);
+  }
+
+  .es-hint {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--es-faint);
+  }
+
+  /* Кнопки: прямоугольник с рамкой в 2px, без теней. */
+  .es-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 6px 16px;
+    border: 2px solid var(--es-line-strong);
+    background: transparent;
+    color: var(--es-ink);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    user-select: none;
+    transition:
+      background-color 0.12s,
+      border-color 0.12s,
+      transform 0.08s;
+  }
+  .es-btn:hover:not(:disabled) {
+    background: var(--es-surface-3);
+  }
+  .es-btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .es-btn:disabled {
+    opacity: 0.45;
+  }
+  .es-btn-primary {
+    border-color: var(--es-accent);
+    background: var(--es-accent);
+    color: var(--es-accent-ink);
+  }
+  .es-btn-primary:hover:not(:disabled) {
+    border-color: var(--es-accent-hover);
+    background: var(--es-accent-hover);
+  }
+  .es-btn-primary:active:not(:disabled) {
+    background: var(--es-accent-press);
+  }
+  .es-btn-danger {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+  }
+  .es-btn-danger:hover:not(:disabled) {
+    background: var(--color-danger);
+    color: #fff;
+  }
+  .es-btn-ghost {
+    border-color: transparent;
+  }
+  .es-btn-sm {
+    min-height: 30px;
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+  .es-btn-icon {
+    width: 36px;
+    padding: 0;
+  }
+  .es-btn-sm.es-btn-icon {
+    width: 30px;
+  }
+
+  /* Поля ввода: светлый прямоугольник с толстой рамкой. */
+  .es-input,
+  .es-select,
+  .es-textarea {
+    display: block;
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 10px;
+    border: 2px solid var(--es-line);
+    background: var(--es-surface);
+    color: var(--es-ink);
+    font-size: 14px;
+    transition: border-color 0.12s;
+  }
+  .es-input:hover,
+  .es-select:hover,
+  .es-textarea:hover {
+    border-color: var(--es-line-strong);
+  }
+  .es-input:focus,
+  .es-select:focus,
+  .es-textarea:focus {
+    border-color: var(--es-accent);
+    outline: none;
+  }
+  .es-input::placeholder,
+  .es-textarea::placeholder {
+    color: var(--es-faint);
+  }
+  .es-input:disabled,
+  .es-select:disabled,
+  .es-textarea:disabled {
+    opacity: 0.55;
+  }
+  .es-select {
+    appearance: none;
+    padding-right: 32px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='3'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+  .es-textarea {
+    min-height: 90px;
+    resize: vertical;
+  }
+
+  /* Флажок: квадрат с галочкой. */
+  .es-check {
+    appearance: none;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--es-line-strong);
+    background: var(--es-surface);
+    display: inline-grid;
+    place-content: center;
+    cursor: pointer;
+  }
+  .es-check::after {
+    content: '';
+    width: 10px;
+    height: 6px;
+    border-left: 2.5px solid #fff;
+    border-bottom: 2.5px solid #fff;
+    transform: rotate(-45deg) translate(1px, -1px);
+    opacity: 0;
+  }
+  .es-check:checked {
+    border-color: var(--es-accent);
+    background: var(--es-accent);
+  }
+  .es-check:checked::after {
+    opacity: 1;
+  }
+
+  /* Переключатель Windows 8: прямоугольная дорожка, квадратный бегунок. */
+  .es-switch {
+    appearance: none;
+    flex: none;
+    position: relative;
+    width: 50px;
+    height: 22px;
+    border: 2px solid var(--es-line-strong);
+    background: transparent;
+    cursor: pointer;
+    transition: background-color 0.15s;
+  }
+  .es-switch::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    width: 14px;
+    height: 22px;
+    background: var(--es-ink);
+    transition: transform 0.15s cubic-bezier(0.1, 0.9, 0.2, 1);
+  }
+  .es-switch:checked {
+    border-color: var(--es-accent);
+    background: var(--es-accent);
+  }
+  .es-switch:checked::after {
+    transform: translateX(36px);
+  }
+
+  .es-card {
+    background: var(--es-surface);
+    border: 1px solid var(--es-line);
+  }
+
+  .es-panel {
+    background: var(--es-surface);
+    padding: 20px;
+  }
+
+  /* Таблицы: строгая сетка, заголовки строчными светлыми буквами. */
+  .es-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  .es-table th {
+    padding: 8px 12px;
+    border-bottom: 2px solid var(--es-line);
+    color: var(--es-muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    text-transform: lowercase;
+    white-space: nowrap;
+  }
+  .es-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--es-line);
+    vertical-align: middle;
+  }
+  .es-table tbody tr:hover td {
+    background: var(--es-surface-2);
+  }
+
+  .es-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 20px;
+    white-space: nowrap;
+    background: var(--es-surface-3);
+    color: var(--es-ink);
+  }
+  .es-badge-accent {
+    background: var(--es-accent);
+    color: #fff;
+  }
+  .es-badge-success {
+    background: var(--color-success);
+    color: #fff;
+  }
+  .es-badge-warning {
+    background: var(--color-warning);
+    color: #fff;
+  }
+  .es-badge-danger {
+    background: var(--color-danger);
+    color: #fff;
+  }
+  .es-badge-info {
+    background: var(--color-info);
+    color: #fff;
+  }
+  .es-badge-sick {
+    background: var(--color-sick);
+    color: #fff;
+  }
+
+  /* Пивот — вкладки Metro: крупные слова, активное ярче остальных. */
+  .es-pivot {
+    display: flex;
+    gap: 22px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .es-pivot > button,
+  .es-pivot > a {
+    flex: none;
+    padding: 4px 0;
+    color: var(--es-faint);
+    font-size: 20px;
+    font-weight: 300;
+    text-transform: lowercase;
+    transition: color 0.12s;
+  }
+  .es-pivot > button:hover,
+  .es-pivot > a:hover {
+    color: var(--es-muted);
+  }
+  .es-pivot > .is-active {
+    color: var(--es-ink);
+  }
+
+  .es-link {
+    color: var(--es-accent-hover);
+    font-weight: 600;
+  }
+  .es-link:hover {
+    text-decoration: underline;
+  }
+}
+
+/* ─── Текст из редактора ────────────────────────────────────────────────── */
+
+.es-rich {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.es-rich > * + * {
+  margin-top: 0.6em;
+}
+.es-rich h1 {
+  font-size: 28px;
+  font-weight: 300;
+  line-height: 1.2;
+}
+.es-rich h2 {
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+.es-rich h3 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.es-rich h4 {
+  font-size: 15px;
+  font-weight: 700;
+}
+.es-rich ul {
+  list-style: square;
+  padding-left: 1.4em;
+}
+.es-rich ol {
+  list-style: decimal;
+  padding-left: 1.6em;
+}
+.es-rich li > p {
+  margin: 0;
+}
+.es-rich blockquote {
+  border-left: 4px solid var(--es-accent);
+  padding: 2px 0 2px 14px;
+  color: var(--es-muted);
+}
+.es-rich code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--es-surface-3);
+  padding: 1px 5px;
+}
+.es-rich pre {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--es-surface-3);
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+.es-rich pre code {
+  background: none;
+  padding: 0;
+}
+.es-rich hr {
+  border: 0;
+  border-top: 2px solid var(--es-line);
+  margin: 1.2em 0;
+}
+.es-rich mark {
+  background: #f4c430;
+  color: #111;
+  padding: 0 2px;
+}
+.es-rich a {
+  color: var(--es-accent-hover);
+  text-decoration: underline;
+}
+.es-rich img {
+  max-width: 100%;
+  height: auto;
+}
+.es-rich table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+}
+.es-rich th,
+.es-rich td {
+  border: 1px solid var(--es-line-strong);
+  padding: 6px 8px;
+  vertical-align: top;
+  min-width: 40px;
+}
+.es-rich th {
+  background: var(--es-surface-3);
+  font-weight: 600;
+  text-align: left;
+}
+.es-rich .selectedCell {
+  background: var(--es-accent-soft);
+}
+.es-rich .ng-formula {
+  display: inline-block;
+  padding: 0 2px;
+}
+.es-rich .ng-formula.is-empty::before {
+  content: 'формула';
+  color: var(--es-faint);
+}
+.es-rich .ng-formula-block {
+  display: block;
+  margin: 0.8em 0;
+  text-align: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+.ProseMirror .ng-formula.ProseMirror-selectednode,
+.ProseMirror .ng-formula-block.ProseMirror-selectednode {
+  outline: 2px solid var(--es-accent);
+}
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--es-faint);
+  pointer-events: none;
+}
+.ProseMirror:focus {
+  outline: none;
+}
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+}
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--es-accent);
+  pointer-events: none;
+}
+.ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+.katex {
+  font-size: 1.08em;
+}
+
+/* ─── Печать ────────────────────────────────────────────────────────────── */
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .es-no-print {
+    display: none !important;
+  }
+}
+
+/* ─── Бланки тестов ─────────────────────────────────────────────────────── */
+/*
+ * Геометрия листа приходит с сервера в миллиметрах — та же, по которой
+ * потом режется скан. Метки и клетки нарисованы рамками и векторной
+ * фигурой, а не заливкой: так принтер печатает их без «фоновой графики».
+ */
+
+.sheet-page {
+  position: relative;
+  width: 210mm;
+  height: 297mm;
+  background: #fff;
+  color: #000;
+  overflow: hidden;
+  page-break-after: always;
+  break-after: page;
+}
+.sheet-page,
+.sheet-page * {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.sheet-page:last-child {
+  page-break-after: auto;
+  break-after: auto;
+}
+.sheet-page .es-rich {
+  color: #000;
+}
+.sheet-marker {
+  position: absolute;
+  display: block;
+}
+.sheet-rule {
+  position: absolute;
+  border-top-style: solid;
+  border-top-color: #000;
+  height: 0;
+}
+.sheet-cell {
+  position: absolute;
+  border: 0.35mm solid #000;
+  box-sizing: border-box;
+}
+.sheet-text {
+  position: absolute;
+  font-family: 'Open Sans', system-ui, sans-serif;
+  color: #000;
+}
+.sheet-code {
+  position: absolute;
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+  }
+  .sheet-page {
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+}
