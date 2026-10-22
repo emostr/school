@@ -54,7 +54,7 @@ interface ToolButton {
     <div class="border-2 border-line bg-surface transition-colors focus-within:border-accent">
       <div class="flex flex-wrap items-center gap-0.5 border-b border-line bg-surface-2 px-1 py-1" role="toolbar" aria-label="Форматирование">
         @if (mode() === 'full') {
-          <select class="es-select !min-h-8 w-[140px] !border-0 !bg-transparent !py-0 text-sm" [ngModel]="blockType()" (ngModelChange)="setBlock($event)" [disabled]="markdownMode()" aria-label="Стиль абзаца">
+          <select class="es-select !min-h-8 w-[160px] !border-0 !bg-transparent !py-0 text-sm" [ngModel]="blockType()" (ngModelChange)="setBlock($event)" [disabled]="markdownMode()" aria-label="Стиль абзаца">
             <option value="p">обычный текст</option>
             <option value="h1">заголовок 1</option>
             <option value="h2">заголовок 2</option>
@@ -343,11 +343,16 @@ export class RichEditor {
     }
   }
 
-  protected setLink(): void {
+  protected async setLink(): Promise<void> {
     const editor = this.editor;
     if (!editor) return;
     const current = String(editor.getAttributes('link')['href'] ?? '');
-    const url = window.prompt('Адрес ссылки (пусто — убрать ссылку)', current || 'https://');
+    const url = await this.notify.prompt({
+      title: 'Ссылка',
+      message: 'Пустое поле — убрать ссылку',
+      value: current || 'https://',
+      type: 'url',
+    });
     if (url === null) return;
     if (!url.trim() || url.trim() === 'https://') {
       this.chain().extendMarkRange('link').unsetLink().run();
