@@ -14,7 +14,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "type-check": "prisma generate && tsc --noEmit",
     "admin:init": "node scripts/admin-init.mjs",
-    "admin:reset": "node scripts/admin-reset.mjs"
+    "admin:reset": "node scripts/admin-reset.mjs",
+    "demo:seed": "node scripts/demo-seed.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.3",
