@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { Notify, Tone } from '../core/notify';
 import { Icon } from './icon';
 
@@ -23,7 +24,7 @@ const TONE_BG: Record<Tone, string> = {
  */
 @Component({
   selector: 'es-notify-host',
-  imports: [Icon],
+  imports: [FormsModule, Icon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="pointer-events-none fixed top-3 right-3 z-[90] flex w-[min(380px,calc(100vw-24px))] flex-col gap-2" aria-live="polite">
@@ -43,12 +44,23 @@ const TONE_BG: Record<Tone, string> = {
 
     @if (notify.dialogs().at(-1); as dialog) {
       <div class="animate-fade-in fixed inset-0 z-[95] flex items-center bg-[var(--es-overlay)]" role="alertdialog" aria-modal="true" [attr.aria-label]="dialog.title">
-        <div class="animate-band-in w-full py-8 {{ dialog.danger ? 'bg-danger text-white' : 'bg-accent text-white' }}">
+        <div class="animate-band-in w-full py-8 text-white {{ dialog.danger ? 'bg-danger' : bg(dialog.tone) }}">
           <div class="mx-auto flex max-w-3xl flex-col gap-6 px-6 sm:flex-row sm:items-end sm:justify-between">
             <div class="min-w-0">
               <h2 class="text-[28px] leading-tight font-light">{{ dialog.title }}</h2>
               @if (dialog.message) {
                 <p class="mt-3 text-[15px] whitespace-pre-line text-white/90">{{ dialog.message }}</p>
+              }
+              @if (dialog.input; as field) {
+                <input
+                  class="mt-4 block w-full max-w-md border-2 border-white bg-white px-3 py-2 text-[15px] text-black outline-none"
+                  [type]="field.type"
+                  [placeholder]="field.placeholder"
+                  [(ngModel)]="field.value"
+                  (keydown.enter)="notify.close(dialog, true)"
+                  autofocus
+                  [attr.aria-label]="dialog.title"
+                />
               }
             </div>
             <div class="flex shrink-0 gap-2">
