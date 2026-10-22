@@ -1,0 +1,63 @@
+# Стек edway.space: база, API и NGINX с интерфейсом. Снаружи доступен только
+# порт web, и по умолчанию лишь на 127.0.0.1 — HTTPS принимает NGINX хоста.
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-edway}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-edway}
+      POSTGRES_DB: ${POSTGRES_DB:-edway}
+    volumes:
+      # В образах 18+ том монтируется в /var/lib/postgresql целиком: данные
+      # лежат в подкаталоге версии, и обновление не упирается в точку монтирования.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-edway} -d ${POSTGRES_DB:-edway}']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      DATABASE_URL: postgresql://${POSTGRES_USER:-edway}:${POSTGRES_PASSWORD:-edway}@postgres:5432/${POSTGRES_DB:-edway}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8030}
+      SESSION_DAYS: ${SESSION_DAYS:-30}
+      UPLOAD_DIR: /data/uploads
+      OCR_DEBUG_DIR: ${OCR_DEBUG_DIR:-}
+      ADMIN_LOGIN: ${ADMIN_LOGIN:-admin}
+      TOTP_ISSUER: ${TOTP_ISSUER:-edway.space}
+      LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT:-20}
+    volumes:
+      # Сканы, фото конспектов и PDF переживают пересборку образа.
+      - uploads:/data/uploads
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '${HTTP_BIND:-127.0.0.1}:${HTTP_PORT:-8030}:80'
+
+volumes:
+  pgdata:
+  uploads:
