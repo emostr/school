@@ -53,9 +53,11 @@ export const guestGuard: CanActivateFn = async () => {
 
 /** Экран для обладателей одной из привилегий (или классных руководителей). */
 export function privilegeGuard(privileges: Privilege[], allowHomeroom = false): CanActivateFn {
-  return () => {
+  return async () => {
     const auth = inject(Auth);
     const router = inject(Router);
+    // Guard'ы одного маршрута идут параллельно: профиль мог ещё не загрузиться.
+    await ensureLoaded(auth);
     const ok = privileges.some((privilege) => auth.has(privilege)) || (allowHomeroom && auth.isHomeroom());
     return ok || router.parseUrl('/');
   };
