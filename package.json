@@ -1,0 +1,11 @@
+{
+  "name": "edway-space",
+  "version": "1.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "edway.space — школьная платформа: расписание, задания, конспекты, посещаемость и тесты",
+  "scripts": {
+    "type-check": "npm --prefix backend run type-check && npm --prefix frontend run type-check",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build"
+  }
+}
