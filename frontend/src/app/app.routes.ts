@@ -52,6 +52,16 @@ export const routes: Routes = [
         canActivate: [privilegeGuard(['TRUSTED', 'TEACHER', 'HEAD'], true)],
         loadComponent: () => import('./notes/note-editor').then((m) => m.NoteEditorPage),
       },
+      {
+        path: 'journal',
+        canActivate: [privilegeGuard(['TEACHER', 'HEAD'])],
+        loadComponent: () => import('./gradebook/journal-page').then((m) => m.JournalPage),
+      },
+      {
+        path: 'diary',
+        canActivate: [privilegeGuard(['STUDENT', 'PARENT'])],
+        loadComponent: () => import('./gradebook/diary-page').then((m) => m.DiaryPage),
+      },
       { path: 'attendance', loadComponent: () => import('./attendance/attendance-page').then((m) => m.AttendancePage) },
       {
         path: 'classes',
