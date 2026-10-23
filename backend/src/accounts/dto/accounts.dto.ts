@@ -9,7 +9,7 @@ import {
   MaxLength,
 } from 'class-validator';
 
-export const PRIVILEGES = ['STUDENT', 'TRUSTED', 'TEACHER', 'HEAD'] as const;
+export const PRIVILEGES = ['STUDENT', 'TRUSTED', 'TEACHER', 'HEAD', 'PARENT'] as const;
 export type PrivilegeInput = (typeof PRIVILEGES)[number];
 
 export class CreateAccountDto {
@@ -43,6 +43,18 @@ export class CreateAccountDto {
   @IsOptional()
   @IsIn(['', '1', '2'])
   group?: string;
+
+  /** Дети родителя — учётные записи учеников. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  childIds?: string[];
+}
+
+export class ChildDto {
+  @IsString()
+  childId!: string;
 }
 
 export class UpdateAccountDto {
