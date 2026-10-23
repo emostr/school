@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { SchoolService } from '../school/school.service';
 import { StorageService } from '../storage/storage.service';
-import { AccountsService } from '../accounts/accounts.service';
+import { AccountsService, ROW_INCLUDE } from '../accounts/accounts.service';
 import { normalizePrivileges } from '../common/access';
 import { tesseractAvailable } from '../ocr/tesseract';
 import { CreateHeadDto, UpdateSchoolDto } from './dto/admin.dto';
@@ -37,6 +37,11 @@ export class AdminService {
         }
       }
     }
+    for (const period of dto.periods ?? []) {
+      if (period.to < period.from) {
+        throw new BadRequestException(`Период «${period.title}» заканчивается раньше, чем начинается`);
+      }
+    }
     return this.school.update(dto);
   }
 
@@ -55,15 +60,7 @@ export class AdminService {
           : {}),
       },
       orderBy: [{ isAdmin: 'desc' }, { fullName: 'asc' }],
-      include: {
-        memberships: {
-          where: { archivedAt: null, class: { archivedAt: null } },
-          include: { class: { select: { id: true, number: true, letter: true } } },
-          take: 1,
-        },
-        homeroomClasses: { where: { archivedAt: null }, select: { id: true, number: true, letter: true } },
-        sessions: { where: { revokedAt: null }, orderBy: { lastSeenAt: 'desc' }, select: { lastSeenAt: true }, take: 1 },
-      },
+      include: ROW_INCLUDE,
       take: 500,
     });
     return rows.map((row) => this.people.toRow(row));
