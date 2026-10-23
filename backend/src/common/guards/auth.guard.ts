@@ -54,6 +54,21 @@ export class AuthGuard implements CanActivate {
               select: { id: true, classId: true },
               take: 1,
             },
+            children: {
+              where: { child: { deletedAt: null } },
+              select: {
+                childId: true,
+                child: {
+                  select: {
+                    memberships: {
+                      where: { archivedAt: null, class: { archivedAt: null } },
+                      select: { id: true, classId: true },
+                      take: 1,
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -87,6 +102,13 @@ export class AuthGuard implements CanActivate {
       homeroomClassIds: account.homeroomClasses.map((item) => item.id),
       studentClassId: membership?.classId ?? null,
       studentId: membership?.id ?? null,
+      children: account.privileges.includes('PARENT')
+        ? account.children.map((link) => ({
+            accountId: link.childId,
+            classId: link.child.memberships[0]?.classId ?? null,
+            studentId: link.child.memberships[0]?.id ?? null,
+          }))
+        : [],
     };
 
     if (now.getTime() - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
