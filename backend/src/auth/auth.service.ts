@@ -37,6 +37,8 @@ export interface Profile {
   school: { id: string; name: string; shortName: string } | null;
   homeroomClasses: { id: string; name: string }[];
   studentClass: { id: string; name: string; group: string } | null;
+  /** Дети родителя — за кого он смотрит расписание, задания и оценки. */
+  children: { accountId: string; fullName: string; firstName: string; classId: string | null; className: string | null; group: string }[];
   createdAt: string;
 }
 
@@ -175,6 +177,24 @@ export class AuthService {
           include: { class: { select: { id: true, number: true, letter: true } } },
           take: 1,
         },
+        children: {
+          where: { child: { deletedAt: null } },
+          orderBy: { child: { fullName: 'asc' } },
+          include: {
+            child: {
+              select: {
+                id: true,
+                fullName: true,
+                firstName: true,
+                memberships: {
+                  where: { archivedAt: null, class: { archivedAt: null } },
+                  include: { class: { select: { id: true, number: true, letter: true } } },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
       },
     });
     if (!account) {
@@ -210,6 +230,19 @@ export class AuthService {
             group: membership.group,
           }
         : null,
+      children: account.privileges.includes('PARENT')
+        ? account.children.map((link) => {
+            const place = link.child.memberships[0];
+            return {
+              accountId: link.child.id,
+              fullName: link.child.fullName,
+              firstName: link.child.firstName,
+              classId: place?.class.id ?? null,
+              className: place ? className(place.class.number, place.class.letter) : null,
+              group: place?.group ?? '',
+            };
+          })
+        : [],
       createdAt: account.createdAt.toISOString(),
     };
   }
