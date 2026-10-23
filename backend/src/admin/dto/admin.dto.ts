@@ -28,6 +28,18 @@ export class BellDto {
   end!: string;
 }
 
+export class PeriodDto {
+  @IsString()
+  @Length(1, 40)
+  title!: string;
+
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  from!: string;
+
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  to!: string;
+}
+
 export class UpdateSchoolDto {
   @IsOptional()
   @IsString()
@@ -59,6 +71,13 @@ export class UpdateSchoolDto {
   @ValidateNested({ each: true })
   @Type(() => BellDto)
   bells?: BellDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @ValidateNested({ each: true })
+  @Type(() => PeriodDto)
+  periods?: PeriodDto[];
 }
 
 export class CreateHeadDto {
