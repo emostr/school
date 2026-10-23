@@ -43,9 +43,14 @@ export class AttendanceController {
     return this.attendance.myLessons(account, date);
   }
 
-  @Access('STUDENT')
+  @Access('STUDENT', 'PARENT')
   @Get('me')
-  mine(@CurrentAccount() account: RequestAccount, @Query('from') from?: string, @Query('to') to?: string) {
-    return this.attendance.mine(account, from, to);
+  mine(
+    @CurrentAccount() account: RequestAccount,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('child') child?: string,
+  ) {
+    return this.attendance.mine(account, from, to, child);
   }
 }
