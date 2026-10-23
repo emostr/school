@@ -25,6 +25,9 @@ export interface AccountRow {
   blocked: boolean;
   studentClass: { id: string; name: string; group: string; studentId: string } | null;
   homeroomClasses: { id: string; name: string }[];
+  /** У родителя — его дети, у ученика — его родители. */
+  children: { id: string; fullName: string; className: string | null }[];
+  parents: { id: string; fullName: string; login: string }[];
   lastSeenAt: string | null;
   createdAt: string;
 }
@@ -38,7 +41,7 @@ export interface IssuedCredentials {
   className?: string;
 }
 
-const ROW_INCLUDE = {
+export const ROW_INCLUDE = {
   memberships: {
     where: { archivedAt: null, class: { archivedAt: null } },
     include: { class: { select: { id: true, number: true, letter: true } } },
@@ -53,6 +56,26 @@ const ROW_INCLUDE = {
     orderBy: { lastSeenAt: 'desc' },
     select: { lastSeenAt: true },
     take: 1,
+  },
+  children: {
+    where: { child: { deletedAt: null } },
+    include: {
+      child: {
+        select: {
+          id: true,
+          fullName: true,
+          memberships: {
+            where: { archivedAt: null, class: { archivedAt: null } },
+            select: { class: { select: { number: true, letter: true } } },
+            take: 1,
+          },
+        },
+      },
+    },
+  },
+  parents: {
+    where: { parent: { deletedAt: null } },
+    include: { parent: { select: { id: true, fullName: true, login: true } } },
   },
 } satisfies Prisma.AccountInclude;
 
@@ -96,6 +119,15 @@ export class AccountsService {
         id: item.id,
         name: className(item.number, item.letter),
       })),
+      children: account.children.map((link) => {
+        const place = link.child.memberships[0];
+        return {
+          id: link.child.id,
+          fullName: link.child.fullName,
+          className: place ? className(place.class.number, place.class.letter) : null,
+        };
+      }),
+      parents: account.parents.map((link) => link.parent),
       lastSeenAt: account.sessions[0]?.lastSeenAt.toISOString() ?? null,
       createdAt: account.createdAt.toISOString(),
     };
@@ -235,6 +267,9 @@ export class AccountsService {
       throw new BadRequestException('Для ученика выберите класс');
     }
 
+    const childIds = privileges.includes('PARENT') ? [...new Set(dto.childIds ?? [])] : [];
+    await this.requireChildren(childIds);
+
     const login = await this.generateLogin(lastName, firstName, middleName);
     const password = generatePassword(10);
     const schoolId = await this.school.id();
@@ -266,6 +301,7 @@ export class AccountsService {
               },
             }
           : {}),
+        ...(childIds.length ? { children: { create: childIds.map((childId) => ({ childId })) } } : {}),
       },
     });
 
@@ -276,6 +312,58 @@ export class AccountsService {
       password,
       ...(schoolClass ? { className: className(schoolClass.number, schoolClass.letter) } : {}),
     };
+  }
+
+  /** Ребёнком может быть только действующий ученик. */
+  private async requireChildren(childIds: string[]): Promise<void> {
+    if (!childIds.length) {
+      return;
+    }
+    const count = await this.prisma.account.count({
+      where: { id: { in: childIds }, deletedAt: null, privileges: { has: 'STUDENT' } },
+    });
+    if (count !== childIds.length) {
+      throw new BadRequestException('Ребёнком можно указать только ученика');
+    }
+  }
+
+  async linkChild(viewer: RequestAccount, parentId: string, childId: string): Promise<AccountRow> {
+    const parent = await this.requireManageable(viewer, parentId, true);
+    if (parent.privileges.includes('STUDENT')) {
+      throw new BadRequestException('Ученик не может быть родителем');
+    }
+    await this.requireChildren([childId]);
+    if (parentId === childId) {
+      throw new BadRequestException('Нельзя быть родителем самому себе');
+    }
+    await this.prisma.$transaction([
+      // Привязка ребёнка делает учётную запись родительской.
+      this.prisma.account.update({
+        where: { id: parentId },
+        data: { privileges: normalizePrivileges([...parent.privileges, 'PARENT']) },
+      }),
+      this.prisma.parentLink.upsert({
+        where: { parentId_childId: { parentId, childId } },
+        create: { parentId, childId },
+        update: {},
+      }),
+    ]);
+    return this.detail(parentId);
+  }
+
+  async unlinkChild(viewer: RequestAccount, parentId: string, childId: string): Promise<AccountRow> {
+    const parent = await this.requireManageable(viewer, parentId, true);
+    await this.prisma.parentLink.deleteMany({ where: { parentId, childId } });
+    const left = await this.prisma.parentLink.count({ where: { parentId } });
+    // Сотрудник без детей перестаёт быть родителем; у «чистого» родителя
+    // привилегию оставляем — ему ещё привяжут ребёнка.
+    if (!left && parent.privileges.some((p) => p === 'TEACHER' || p === 'HEAD')) {
+      await this.prisma.account.update({
+        where: { id: parentId },
+        data: { privileges: parent.privileges.filter((p) => p !== 'PARENT') },
+      });
+    }
+    return this.detail(parentId);
   }
 
   /**
@@ -322,7 +410,12 @@ export class AccountsService {
   private async requireManageable(viewer: RequestAccount, id: string, headOnly = false) {
     const account = await this.prisma.account.findFirst({
       where: { id, deletedAt: null, isAdmin: false },
-      include: { memberships: { where: { archivedAt: null }, select: { id: true, classId: true } } },
+      include: {
+        memberships: { where: { archivedAt: null }, select: { id: true, classId: true } },
+        children: {
+          select: { child: { select: { memberships: { where: { archivedAt: null }, select: { classId: true } } } } },
+        },
+      },
     });
     if (!account) {
       throw new NotFoundException('Учётная запись не найдена');
@@ -333,7 +426,12 @@ export class AccountsService {
     const homeroomStudent =
       account.privileges.includes('STUDENT') &&
       account.memberships.some((membership) => isHomeroomOf(viewer, membership.classId));
-    if (headOnly || !homeroomStudent) {
+    // Родитель своего ученика — тоже забота классного руководителя: например, выдать пароль.
+    const homeroomParent =
+      account.privileges.includes('PARENT') &&
+      !account.privileges.some((p) => p === 'TEACHER' || p === 'HEAD') &&
+      account.children.some((link) => link.child.memberships.some((m) => isHomeroomOf(viewer, m.classId)));
+    if (headOnly || !(homeroomStudent || homeroomParent)) {
       throw new ForbiddenException('Эту учётную запись правит завуч');
     }
     return account;
