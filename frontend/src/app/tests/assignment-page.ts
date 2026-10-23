@@ -13,6 +13,8 @@ import { Progress } from '../ui/progress';
 import { TestsNav } from './tests-nav';
 import { GRADE_TONES, WORK_STATUS_LABELS, WORK_STATUS_TONES } from './catalog';
 import { AssignmentDetail, AssignmentReport, UploadOutcome, WorkStatus } from './test-types';
+import { GradeKind, GradeTarget, Subject } from '../core/types';
+import { defaultWeight, GRADE_KINDS } from '../gradebook/kinds';
 
 const TONE_BADGE: Record<string, string> = {
   neutral: '',
@@ -49,6 +51,7 @@ const TONE_BADGE: Record<string, string> = {
             <p class="mb-4 text-sm text-muted">Сдано {{ scanned() }} из {{ d.works.length }}</p>
             <es-progress [value]="d.works.length ? (checked() / d.works.length) * 100 : 0" [showValue]="true" [label]="'Проверено ' + checked()" [tone]="checked() === d.works.length ? 'success' : 'accent'" />
             <div class="mt-4 flex flex-wrap gap-2">
+              <button type="button" class="es-btn es-btn-sm" [disabled]="!checked()" (click)="openImport(d)"><es-icon name="table" [size]="16" /> в журнал</button>
               <button type="button" class="es-btn es-btn-sm" (click)="toggleClosed(d)"><es-icon [name]="d.closedAt ? 'unlock' : 'check'" [size]="16" /> {{ d.closedAt ? 'возобновить' : 'завершить проверку' }}</button>
               <button type="button" class="es-btn es-btn-ghost es-btn-sm hover:!text-danger" (click)="remove()"><es-icon name="trash" [size]="16" /> удалить</button>
             </div>
@@ -164,6 +167,39 @@ const TONE_BADGE: Record<string, string> = {
         }
       </es-page>
 
+      <es-flyout [open]="importOpen()" title="оценки в журнал" [subtitle]="d.className + ' · ' + day(d.date)" (closed)="importOpen.set(false)">
+        <p class="mb-4 text-sm text-muted">Оценки проверенных работ встанут в журнал на дату работы. Повторный перенос не задвоит уже перенесённые.</p>
+        <div class="space-y-4">
+          <div>
+            <label class="es-label" for="imp-subject">предмет</label>
+            <select id="imp-subject" class="es-select" [(ngModel)]="importSubject">
+              <option [ngValue]="''" disabled>{{ importSubjects().length ? 'выберите' : 'вы не ведёте предметов в этом классе' }}</option>
+              @for (subject of importSubjects(); track subject.id) {
+                <option [ngValue]="subject.id">{{ subject.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="grid grid-cols-[1fr_90px] gap-3">
+            <div>
+              <label class="es-label" for="imp-kind">вид работы</label>
+              <select id="imp-kind" class="es-select" [(ngModel)]="importKind" (ngModelChange)="importWeight = weightOf($event)">
+                @for (item of kinds; track item.value) {
+                  <option [ngValue]="item.value">{{ item.label }}</option>
+                }
+              </select>
+            </div>
+            <div>
+              <label class="es-label" for="imp-weight">вес</label>
+              <input id="imp-weight" type="number" min="1" max="10" class="es-input" [(ngModel)]="importWeight" />
+            </div>
+          </div>
+        </div>
+        <ng-container flyout-actions>
+          <button type="button" class="es-btn" (click)="importOpen.set(false)">отмена</button>
+          <button type="button" class="es-btn es-btn-primary" [disabled]="!importSubject" (click)="runImport(d)">перенести {{ checked() }}</button>
+        </ng-container>
+      </es-flyout>
+
       <es-flyout [open]="!!attachFile()" title="чей это лист?" subtitle="Код не прочитался — выберите ученика вручную" (closed)="attachFile.set(null)">
         @if (attachFile(); as file) {
           <img [src]="'/api/files/' + file" alt="Скан работы" class="mb-4 max-h-[360px] w-full border border-line bg-surface-2 object-contain" />
@@ -197,6 +233,12 @@ export class AssignmentPage {
   protected readonly uploading = signal(false);
   protected readonly attachFile = signal<string | null>(null);
   protected attachTo = '';
+  protected readonly kinds = GRADE_KINDS;
+  protected readonly importOpen = signal(false);
+  protected readonly importSubjects = signal<Subject[]>([]);
+  protected importSubject = '';
+  protected importKind: GradeKind = 'TEST';
+  protected importWeight = 3;
 
   protected readonly checked = computed(() => this.data()?.works.filter((work) => work.status === 'CHECKED').length ?? 0);
   protected readonly scanned = computed(() => this.data()?.works.filter((work) => work.status !== 'PENDING').length ?? 0);
@@ -277,6 +319,40 @@ export class AssignmentPage {
       await this.api.post(`/assignments/${data.id}/${data.closedAt ? 'reopen' : 'close'}`, {});
       await this.load();
       this.notify.success(data.closedAt ? 'Проверка возобновлена' : 'Проверка завершена');
+    } catch (error) {
+      this.notify.error(errorMessage(error));
+    }
+  }
+
+  protected async openImport(data: AssignmentDetail): Promise<void> {
+    try {
+      const targets = await this.api.get<GradeTarget[]>('/gradebook/targets');
+      const target = targets.find((t) => t.classId === data.classId);
+      this.importSubjects.set((target?.subjects ?? []).filter((subject) => subject.canGrade));
+      this.importSubject = this.importSubjects().length === 1 ? this.importSubjects()[0].id : '';
+      this.importOpen.set(true);
+    } catch (error) {
+      this.notify.error(error);
+    }
+  }
+
+  protected weightOf(kind: GradeKind): number {
+    return defaultWeight(kind);
+  }
+
+  protected async runImport(data: AssignmentDetail): Promise<void> {
+    try {
+      const result = await this.api.post<{ created: number; skipped: number; unsigned: number }>('/gradebook/import-assignment', {
+        assignmentId: data.id,
+        subjectId: this.importSubject,
+        kind: this.importKind,
+        weight: Number(this.importWeight) || 1,
+      });
+      this.importOpen.set(false);
+      const parts = [`Перенесено оценок: ${result.created}`];
+      if (result.skipped) parts.push(`уже были в журнале: ${result.skipped}`);
+      if (result.unsigned) parts.push(`запасных бланков без ученика: ${result.unsigned} — подпишите их на странице работы`);
+      this.notify.show(result.created ? 'success' : 'warning', parts.join('; '));
     } catch (error) {
       this.notify.error(errorMessage(error));
     }
