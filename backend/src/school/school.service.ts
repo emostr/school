@@ -9,6 +9,13 @@ export interface Bell {
   end: string;
 }
 
+/** Учебный период: четверть, триместр, полугодие. */
+export interface Period {
+  title: string;
+  from: string;
+  to: string;
+}
+
 export interface SchoolInfo {
   id: string;
   name: string;
@@ -17,6 +24,7 @@ export interface SchoolInfo {
   timezone: string;
   weekDays: number;
   bells: Bell[];
+  periods: Period[];
 }
 
 /** Звонки по умолчанию: восемь уроков по 45 минут. */
@@ -81,6 +89,14 @@ export class SchoolService implements OnModuleInit {
         ...(data.bells !== undefined
           ? { bells: [...data.bells].sort((a, b) => a.number - b.number) as unknown as Prisma.InputJsonValue }
           : {}),
+        ...(data.periods !== undefined
+          ? {
+              settings: {
+                ...(((await this.prisma.school.findUniqueOrThrow({ where: { id } })).settings ?? {}) as object),
+                periods: [...data.periods].sort((a, b) => a.from.localeCompare(b.from)),
+              } as unknown as Prisma.InputJsonValue,
+            }
+          : {}),
       },
     });
     this.cached = this.toInfo(row);
@@ -95,6 +111,7 @@ export class SchoolService implements OnModuleInit {
     timezone: string;
     weekDays: number;
     bells: unknown;
+    settings: unknown;
   }): SchoolInfo {
     return {
       id: row.id,
@@ -104,6 +121,7 @@ export class SchoolService implements OnModuleInit {
       timezone: row.timezone,
       weekDays: row.weekDays,
       bells: (Array.isArray(row.bells) ? row.bells : []) as Bell[],
+      periods: ((row.settings as { periods?: Period[] } | null)?.periods ?? []) as Period[],
     };
   }
 }
