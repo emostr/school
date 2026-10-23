@@ -1,6 +1,6 @@
 /** Типы учебной части платформы — в том виде, в каком их отдаёт API. */
 
-export type Privilege = 'STUDENT' | 'TRUSTED' | 'TEACHER' | 'HEAD';
+export type Privilege = 'STUDENT' | 'TRUSTED' | 'TEACHER' | 'HEAD' | 'PARENT';
 export type SetupStep = 'password' | 'totp' | 'done';
 export type Theme = 'dark' | 'light';
 export type NotifyMode = 'toast' | 'popup';
@@ -29,7 +29,17 @@ export interface Profile {
   school: { id: string; name: string; shortName: string } | null;
   homeroomClasses: { id: string; name: string }[];
   studentClass: { id: string; name: string; group: string } | null;
+  children: Child[];
   createdAt: string;
+}
+
+export interface Child {
+  accountId: string;
+  fullName: string;
+  firstName: string;
+  classId: string | null;
+  className: string | null;
+  group: string;
 }
 
 export interface Bell {
@@ -46,7 +56,14 @@ export interface SchoolInfo {
   timezone: string;
   weekDays: number;
   bells: Bell[];
+  periods: Period[];
   today: string;
+}
+
+export interface Period {
+  title: string;
+  from: string;
+  to: string;
 }
 
 export interface Subject {
@@ -100,6 +117,7 @@ export interface ClassStudent {
   login?: string | null;
   blocked?: boolean;
   mustChangePassword?: boolean;
+  parents?: { id: string; fullName: string; login: string; mustChangePassword: boolean }[];
 }
 
 export interface ClassDetail extends ClassRow {
@@ -123,6 +141,8 @@ export interface AccountRow {
   blocked: boolean;
   studentClass: { id: string; name: string; group: string; studentId: string } | null;
   homeroomClasses: { id: string; name: string }[];
+  children: { id: string; fullName: string; className: string | null }[];
+  parents: { id: string; fullName: string; login: string }[];
   lastSeenAt: string | null;
   createdAt: string;
 }
@@ -356,4 +376,90 @@ export interface SystemInfo {
   uploadsSize: number;
   ocr: string;
   counts: Record<'accounts' | 'students' | 'staff' | 'classes' | 'tests' | 'homework' | 'notes', number>;
+}
+
+// ─── Электронный журнал ────────────────────────────────────────────────────
+
+export type GradeKind =
+  | 'LESSON'
+  | 'ORAL'
+  | 'HOMEWORK'
+  | 'INDEPENDENT'
+  | 'QUIZ'
+  | 'TEST'
+  | 'DICTATION'
+  | 'ESSAY'
+  | 'LAB'
+  | 'PROJECT'
+  | 'EXAM'
+  | 'OTHER';
+
+export interface Grade {
+  id: string;
+  studentId: string;
+  subjectId: string;
+  date: string;
+  lessonNumber: number | null;
+  value: number;
+  kind: GradeKind;
+  weight: number;
+  comment: string;
+  fromTest: boolean;
+  teacher: { id: string; fullName: string } | null;
+  updatedAt: string;
+}
+
+export interface JournalColumn {
+  date: string;
+  lessonNumber: number | null;
+  group: string;
+}
+
+export interface Journal {
+  classId: string;
+  className: string;
+  subject: { id: string; name: string };
+  from: string;
+  to: string;
+  canEdit: boolean;
+  columns: JournalColumn[];
+  students: {
+    id: string;
+    fullName: string;
+    group: string;
+    left: boolean;
+    grades: Grade[];
+    absences: { date: string; number: number; status: AttendanceStatus }[];
+    average: number | null;
+  }[];
+}
+
+export interface GradeTarget {
+  classId: string;
+  className: string;
+  homeroom: boolean;
+  subjects: (Subject & { canGrade: boolean })[];
+}
+
+export interface Diary {
+  student: { accountId: string; fullName: string };
+  from: string;
+  to: string;
+  subjects: { subject: Subject; grades: Grade[]; average: number | null }[];
+  recent: (Grade & { subject: string })[];
+}
+
+export interface GradeSummary {
+  classId: string;
+  className: string;
+  from: string;
+  to: string;
+  subjects: Subject[];
+  students: {
+    id: string;
+    fullName: string;
+    averages: Record<string, number | null>;
+    counts: Record<string, number>;
+    average: number | null;
+  }[];
 }
