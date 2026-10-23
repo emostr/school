@@ -4,6 +4,7 @@ import { CurrentAccount } from '../common/decorators/current-account.decorator';
 import { RequestAccount } from '../common/types';
 import { AccountsService } from './accounts.service';
 import {
+  ChildDto,
   CreateAccountDto,
   GroupDto,
   ImportStudentsDto,
@@ -99,6 +100,19 @@ export class AccountsController {
   @HttpCode(200)
   move(@CurrentAccount() account: RequestAccount, @Param('id') id: string, @Body() dto: MoveStudentDto) {
     return this.accounts.moveStudent(account, id, dto.classId);
+  }
+
+  @Access('HEAD')
+  @Post(':id/children')
+  @HttpCode(200)
+  linkChild(@CurrentAccount() account: RequestAccount, @Param('id') id: string, @Body() dto: ChildDto) {
+    return this.accounts.linkChild(account, id, dto.childId);
+  }
+
+  @Access('HEAD')
+  @Delete(':id/children/:childId')
+  unlinkChild(@CurrentAccount() account: RequestAccount, @Param('id') id: string, @Param('childId') childId: string) {
+    return this.accounts.unlinkChild(account, id, childId);
   }
 
   @Access('HEAD')
