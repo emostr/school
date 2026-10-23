@@ -60,6 +60,12 @@ import { Credentials } from '../ui/credentials';
                       } @else if (student.mustChangePassword) {
                         <span class="es-badge ml-1" title="Ещё не входил: пароль временный">не входил</span>
                       }
+                      @for (parent of student.parents ?? []; track parent.id) {
+                        <span class="mt-0.5 flex items-center gap-2 text-xs text-muted">
+                          <es-icon name="users" [size]="12" /> {{ parent.fullName }} · <span class="font-mono">{{ parent.login }}</span>
+                          <button type="button" class="text-accent-hover hover:underline" (click)="resetParent(parent)">пароль</button>
+                        </span>
+                      }
                     </td>
                     @if (d.canManage) {
                       <td class="font-mono text-sm">{{ student.login }}</td>
@@ -85,6 +91,9 @@ import { Credentials } from '../ui/credentials';
                     @if (d.canManage) {
                       <td class="text-right">
                         @if (student.accountId) {
+                          @if (auth.isHead()) {
+                            <button type="button" class="es-btn es-btn-ghost es-btn-sm mr-1" (click)="openParent(student)"><es-icon name="userPlus" [size]="14" /> родитель</button>
+                          }
                           <button type="button" class="es-btn es-btn-sm" (click)="resetPassword(student)">новый пароль</button>
                         }
                       </td>
@@ -135,6 +144,29 @@ import { Credentials } from '../ui/credentials';
           <button type="button" class="es-btn es-btn-primary" (click)="saveHomeroom()">сохранить</button>
         </ng-container>
       </es-flyout>
+      <es-flyout [open]="!!parentFor()" title="родитель" [subtitle]="parentFor()?.fullName ?? ''" (closed)="parentFor.set(null)">
+        <form id="parent-form" class="space-y-4" (ngSubmit)="createParent()">
+          <div>
+            <label class="es-label" for="p-last">фамилия</label>
+            <input id="p-last" name="last" class="es-input" [(ngModel)]="parentLast" required />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="es-label" for="p-first">имя</label>
+              <input id="p-first" name="first" class="es-input" [(ngModel)]="parentFirst" required />
+            </div>
+            <div>
+              <label class="es-label" for="p-middle">отчество</label>
+              <input id="p-middle" name="middle" class="es-input" [(ngModel)]="parentMiddle" />
+            </div>
+          </div>
+          <p class="es-hint">Родитель видит расписание, задания, конспекты, посещаемость и оценки ребёнка — только на чтение. Второго ребёнка можно привязать в разделе «люди».</p>
+        </form>
+        <ng-container flyout-actions>
+          <button type="button" class="es-btn" (click)="parentFor.set(null)">отмена</button>
+          <button type="submit" form="parent-form" class="es-btn es-btn-primary" [disabled]="busy()">завести</button>
+        </ng-container>
+      </es-flyout>
     } @else {
       <es-dots class="my-16" />
     }
@@ -157,6 +189,10 @@ export class ClassPage {
   protected readonly busy = signal(false);
   protected readonly importText = signal('');
   protected homeroomId = '';
+  protected readonly parentFor = signal<ClassStudent | null>(null);
+  protected parentLast = '';
+  protected parentFirst = '';
+  protected parentMiddle = '';
 
   protected readonly importCount = computed(() => {
     const count = this.importText().split('\n').filter((line) => line.trim()).length;
@@ -219,6 +255,50 @@ export class ClassPage {
     try {
       const credentials = await this.api.post<IssuedCredentials>(`/accounts/${student.accountId}/reset-password`);
       this.issued.set([{ ...credentials, className: this.detail()?.name }]);
+    } catch (error) {
+      this.notify.error(error);
+    }
+  }
+
+  protected openParent(student: ClassStudent): void {
+    // Чаще всего у родителя та же фамилия, что у ребёнка.
+    this.parentLast = student.lastName;
+    this.parentFirst = '';
+    this.parentMiddle = '';
+    this.parentFor.set(student);
+  }
+
+  protected async createParent(): Promise<void> {
+    const student = this.parentFor();
+    if (!student?.accountId) return;
+    this.busy.set(true);
+    try {
+      const credentials = await this.api.post<IssuedCredentials>('/accounts', {
+        lastName: this.parentLast,
+        firstName: this.parentFirst,
+        middleName: this.parentMiddle,
+        privileges: ['PARENT'],
+        childIds: [student.accountId],
+      });
+      this.parentFor.set(null);
+      this.issued.set([{ ...credentials, className: `родитель: ${student.fullName}` }]);
+      await this.reload();
+    } catch (error) {
+      this.notify.error(errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  protected async resetParent(parent: { id: string; fullName: string }): Promise<void> {
+    const ok = await this.notify.confirm({
+      title: `Выдать новый пароль: ${parent.fullName}?`,
+      message: 'Старый пароль перестанет работать.',
+      confirmText: 'Выдать',
+    });
+    if (!ok) return;
+    try {
+      this.issued.set([await this.api.post<IssuedCredentials>(`/accounts/${parent.id}/reset-password`)]);
     } catch (error) {
       this.notify.error(error);
     }
