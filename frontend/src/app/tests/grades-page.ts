@@ -33,7 +33,7 @@ const GRADES = [
   imports: [FormsModule, RouterLink, Page, Icon, Dots, Empty, TestsNav],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <es-page title="журнал оценок" subtitle="Проверенные работы по дате, классу и тесту">
+    <es-page title="оценки за тесты" subtitle="Проверенные работы по дате, классу и тесту">
       <ng-container page-actions>
         <button type="button" class="es-btn" (click)="reload()"><es-icon name="refresh" [size]="18" /> обновить</button>
         <button type="button" class="es-btn es-btn-primary" [disabled]="!rows().length" (click)="exportCsv()"><es-icon name="download" [size]="18" /> выгрузить CSV</button>
