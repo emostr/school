@@ -10,8 +10,8 @@ export class ScheduleController {
   constructor(private readonly schedule: ScheduleService) {}
 
   @Get('me')
-  me(@CurrentAccount() account: RequestAccount, @Query('date') date?: string) {
-    return this.schedule.myWeek(account, date);
+  me(@CurrentAccount() account: RequestAccount, @Query('date') date?: string, @Query('child') child?: string) {
+    return this.schedule.myWeek(account, date, child);
   }
 
   @Get('classes/:classId')
