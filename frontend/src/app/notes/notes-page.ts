@@ -96,7 +96,7 @@ export class NotesPage {
   protected readonly search = signal('');
 
   protected readonly classId = computed(
-    () => this.query()['class'] || this.auth.profile()?.studentClass?.id || this.auth.homeroomIds()[0] || '',
+    () => this.query()['class'] || this.auth.learnerClassId() || this.auth.homeroomIds()[0] || '',
   );
   protected readonly subjectId = computed(() => this.query()['subject'] ?? '');
   protected readonly className = computed(() => this.school.classes().find((item) => item.id === this.classId())?.name ?? '');
