@@ -56,7 +56,7 @@ export class HomeworkService {
   }
 
   async list(viewer: RequestAccount, query: { classId?: string; from?: string; to?: string; subjectId?: string }) {
-    const classId = query.classId || viewer.studentClassId;
+    const classId = query.classId || viewer.studentClassId || viewer.children[0]?.classId;
     if (!classId) {
       throw new BadRequestException('Выберите класс');
     }
@@ -88,7 +88,7 @@ export class HomeworkService {
 
   /** Задания по одному предмету подряд — архив, листаемый назад от даты. */
   async archive(viewer: RequestAccount, query: { classId?: string; subjectId?: string; before?: string; search?: string }) {
-    const classId = query.classId || viewer.studentClassId;
+    const classId = query.classId || viewer.studentClassId || viewer.children[0]?.classId;
     if (!classId) {
       throw new BadRequestException('Выберите класс');
     }
