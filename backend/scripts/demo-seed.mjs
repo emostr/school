@@ -211,6 +211,57 @@ if (!existingNotes) {
   });
 }
 
+// Учебные периоды — четверти текущего учебного года.
+const y = year;
+const periods = [
+  { title: '1 четверть', from: `${y}-09-01`, to: `${y}-10-24` },
+  { title: '2 четверть', from: `${y}-11-05`, to: `${y}-12-28` },
+  { title: '3 четверть', from: `${y + 1}-01-12`, to: `${y + 1}-03-20` },
+  { title: '4 четверть', from: `${y + 1}-03-30`, to: `${y + 1}-05-26` },
+];
+const currentSchool = await prisma.school.findUniqueOrThrow({ where: { id: school.id } });
+await prisma.school.update({
+  where: { id: school.id },
+  data: { settings: { ...(currentSchool.settings ?? {}), periods } },
+});
+
+// Родитель первого ученика 8А.
+const parent = await person('alekseeva.ev', 'Алексеева', 'Елена', 'Викторовна', ['PARENT']);
+await prisma.parentLink.upsert({
+  where: { parentId_childId: { parentId: parent.id, childId: pupils8[0].id } },
+  create: { parentId: parent.id, childId: pupils8[0].id },
+  update: {},
+});
+
+// Оценки за последние три недели по расписанию 8А.
+if (!(await prisma.grade.count({ where: { classId: class8.id } }))) {
+  const roster = await prisma.student.findMany({ where: { classId: class8.id, archivedAt: null } });
+  const kinds = ['LESSON', 'ORAL', 'HOMEWORK', 'LESSON', 'INDEPENDENT'];
+  const weights = { LESSON: 1, ORAL: 1, HOMEWORK: 1, INDEPENDENT: 2, TEST: 3 };
+  const data = [];
+  let seed = 7;
+  const random = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+  for (let offset = -21; offset <= 0; offset += 1) {
+    const date = day(offset);
+    const weekday = date.getUTCDay() || 7;
+    const lessons = GRID_8[weekday] ?? [];
+    lessons.forEach((lesson, index) => {
+      if (lesson.group) return;
+      const isTest = offset === -7 && index === 0;
+      for (const student of roster) {
+        if (!isTest && random() > 0.18) continue;
+        const kind = isTest ? 'TEST' : kinds[Math.floor(random() * kinds.length)];
+        const value = Math.min(5, Math.max(2, Math.round(3.9 + (random() - 0.4) * 2.4)));
+        data.push({
+          classId: class8.id, studentId: student.id, subjectId: lesson.subject.id, date, lessonNumber: index + 1,
+          value, kind, weight: weights[kind], teacherId: lesson.teacher.id,
+        });
+      }
+    });
+  }
+  await prisma.grade.createMany({ data });
+}
+
 await prisma.$disconnect();
 console.log('');
 console.log('  Показательные данные готовы');
@@ -219,4 +270,5 @@ console.log('  Завуч:          zavuch (второй фактор — клю
 console.log(`  Ключ TOTP:      ${totpSecret}`);
 console.log('  Учитель:        smirnova.ev (классный руководитель 8А)');
 console.log(`  Ученик:         ${pupils8[0].login} (доверенный, 8А)`);
+console.log('  Родитель:       alekseeva.ev (мама ученика выше)');
 console.log('');
