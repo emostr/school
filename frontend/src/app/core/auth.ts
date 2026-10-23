@@ -4,6 +4,7 @@ import { Preferences, Privilege, Profile, Theme } from './types';
 
 const THEME_KEY = 'es-theme';
 const NOTIFY_KEY = 'es-notify';
+const CHILD_KEY = 'es-child';
 
 export type LoginResult = { stage: 'session'; profile: Profile } | { stage: 'totp'; ticket: string };
 
@@ -33,6 +34,21 @@ export class Auth {
   readonly isHomeroom = computed(() => this.homeroomIds().length > 0);
   readonly setupStep = computed(() => this.profile()?.setupStep ?? 'done');
 
+  /** Родитель: дети и тот, за кого он сейчас смотрит. */
+  readonly isParent = computed(() => this.has('PARENT') && (this.profile()?.children.length ?? 0) > 0);
+  readonly children = computed(() => this.profile()?.children ?? []);
+  private readonly childId = signal<string | null>(readLocal(CHILD_KEY));
+  readonly child = computed(() => {
+    const children = this.children();
+    return children.find((item) => item.accountId === this.childId()) ?? children.at(0) ?? null;
+  });
+  /** Смотрит ли учётная запись за ученика — свою или ребёнка. */
+  readonly isLearner = computed(() => this.isStudent() || this.isParent());
+  /** Класс, расписание и задания которого показывать «по умолчанию». */
+  readonly learnerClassId = computed(() => this.profile()?.studentClass?.id ?? this.child()?.classId ?? '');
+  /** Параметр child для API: только родителю. */
+  readonly childParam = computed(() => (this.isStudent() ? undefined : this.child()?.accountId));
+
   constructor() {
     effect(() => {
       const theme = this.theme();
@@ -41,6 +57,11 @@ export class Auth {
       writeLocal(THEME_KEY, theme);
     });
     effect(() => writeLocal(NOTIFY_KEY, this.notifyMode()));
+  }
+
+  selectChild(accountId: string): void {
+    this.childId.set(accountId);
+    writeLocal(CHILD_KEY, accountId);
   }
 
   has(privilege: Privilege): boolean {
