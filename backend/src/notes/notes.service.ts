@@ -60,7 +60,7 @@ export class NotesService {
     viewer: RequestAccount,
     query: { classId?: string; subjectId?: string; from?: string; to?: string; search?: string },
   ) {
-    const classId = query.classId || viewer.studentClassId;
+    const classId = query.classId || viewer.studentClassId || viewer.children[0]?.classId;
     if (!classId) {
       throw new BadRequestException('Выберите класс');
     }
