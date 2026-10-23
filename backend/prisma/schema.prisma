@@ -51,6 +51,8 @@ enum Privilege {
   TEACHER
   // Завуч: всё по школе, заводит учётные записи. Второй фактор обязателен.
   HEAD
+  // Родитель: видит то же, что его ребёнок (ParentLink), только на чтение.
+  PARENT
 }
 
 model Account {
@@ -109,9 +111,26 @@ model Account {
   assignments      Assignment[]
   checkedWorks     Work[]
   uploads          MediaFile[]
+  children         ParentLink[]      @relation("LinkParent")
+  parents          ParentLink[]      @relation("LinkChild")
+  gradesGiven      Grade[]
 
   @@index([schoolId])
   @@index([deletedAt])
+}
+
+// Родитель и ребёнок. У ребёнка может быть несколько родителей, у
+// родителя — несколько детей в разных классах.
+model ParentLink {
+  id        String   @id @default(cuid())
+  parentId  String
+  parent    Account  @relation("LinkParent", fields: [parentId], references: [id], onDelete: Cascade)
+  childId   String
+  child     Account  @relation("LinkChild", fields: [childId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([parentId, childId])
+  @@index([childId])
 }
 
 model BackupCode {
@@ -166,6 +185,7 @@ model SchoolClass {
   homework         Homework[]
   notes            Note[]
   attendance       Attendance[]
+  grades           Grade[]
 
   @@unique([schoolId, number, letter, archiveKey])
   @@index([schoolId, archivedAt])
@@ -191,6 +211,7 @@ model Student {
 
   works      Work[]
   attendance Attendance[]
+  grades     Grade[]
 
   @@index([classId, searchKey])
   @@index([accountId])
@@ -212,6 +233,7 @@ model Subject {
   homework   Homework[]
   notes      Note[]
   attendance Attendance[]
+  grades     Grade[]
 }
 
 model Room {
@@ -440,6 +462,65 @@ model Attendance {
 
   @@unique([studentId, date, number])
   @@index([classId, date])
+}
+
+// ─── Электронный журнал ────────────────────────────────────────────────────
+
+enum GradeKind {
+  // Работа на уроке.
+  LESSON
+  // Устный ответ.
+  ORAL
+  // Домашняя работа.
+  HOMEWORK
+  // Самостоятельная работа.
+  INDEPENDENT
+  // Проверочная работа.
+  QUIZ
+  // Контрольная работа.
+  TEST
+  // Диктант.
+  DICTATION
+  // Сочинение или изложение.
+  ESSAY
+  // Лабораторная или практическая работа.
+  LAB
+  // Проект или доклад.
+  PROJECT
+  // Итоговая работа, экзамен.
+  EXAM
+  OTHER
+}
+
+// Оценка в журнале. Стоит на дату (и номер урока, если известен), у каждой —
+// вид работы и вес: контрольная весит больше ответа у доски, и средний балл
+// считается взвешенным.
+model Grade {
+  id           String      @id @default(cuid())
+  classId      String
+  class        SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId    String
+  subject      Subject     @relation(fields: [subjectId], references: [id])
+  date         DateTime    @db.Date
+  lessonNumber Int?
+  // 1..5 — школьная шкала.
+  value        Int
+  kind         GradeKind   @default(LESSON)
+  weight       Int         @default(1)
+  comment      String      @default("")
+  teacherId    String?
+  teacher      Account?    @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  // Оценка перенесена из проверенной работы теста — второй раз её не перенесём.
+  workId       String?     @unique
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  // Удалённая оценка остаётся в базе: по ней видно, кто и когда её снял.
+  deletedAt    DateTime?
+
+  @@index([classId, subjectId, date])
+  @@index([studentId, date])
 }
 
 // ─── Тесты ─────────────────────────────────────────────────────────────────
