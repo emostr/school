@@ -76,10 +76,20 @@ export class ScheduleService {
     };
   }
 
-  /** «Моё расписание»: ученику — его класс, учителю — его уроки. */
-  async myWeek(viewer: RequestAccount, date?: string) {
+  /**
+   * «Моё расписание»: ученику и родителю — класс (своего или ребёнка),
+   * учителю — его уроки. Сотрудник-родитель смотрит своё, если не выбран ребёнок.
+   */
+  async myWeek(viewer: RequestAccount, date?: string, child?: string) {
     if (viewer.studentClassId) {
       return this.classWeek(viewer, viewer.studentClassId, date);
+    }
+    if (viewer.children.length && (child || !(has(viewer, 'TEACHER') || has(viewer, 'HEAD')))) {
+      const learner = this.access.learner(viewer, child);
+      if (!learner.classId) {
+        throw new BadRequestException('Ребёнок пока не прикреплён к классу');
+      }
+      return this.classWeek(viewer, learner.classId, date);
     }
     if (has(viewer, 'TEACHER') || has(viewer, 'HEAD')) {
       return this.teacherWeek(viewer, viewer.id, date);
