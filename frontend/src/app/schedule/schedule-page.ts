@@ -16,7 +16,7 @@ import { WeekNav } from '../ui/week-nav';
 import { WeekView } from './week-view';
 import { ChangeFlyout, ChangeTarget } from './change-flyout';
 
-type Mode = 'mine' | 'class' | 'teacher';
+type Mode = 'mine' | 'child' | 'class' | 'teacher';
 
 @Component({
   selector: 'es-schedule-page',
@@ -174,6 +174,8 @@ export class SchedulePage {
   protected readonly modes = computed(() => {
     const list: { value: Mode; label: string }[] = [];
     if (this.auth.isStudent() || this.auth.isTeacher()) list.push({ value: 'mine', label: this.auth.isStudent() ? 'мой класс' : 'мои уроки' });
+    // Родитель смотрит класс ребёнка; учителю-родителю это отдельная вкладка.
+    if (this.auth.isParent()) list.push({ value: 'child', label: `класс: ${this.auth.child()?.firstName ?? 'ребёнок'}` });
     if (this.auth.isStaff()) list.push({ value: 'class', label: 'классы' });
     if (this.auth.isHead()) list.push({ value: 'teacher', label: 'учителя' });
     return list;
@@ -183,7 +185,7 @@ export class SchedulePage {
     const q = this.query();
     if (q['teacher'] && this.auth.isHead()) return 'teacher';
     if (q['class'] && this.auth.isStaff()) return 'class';
-    if (q['mode'] === 'class' || q['mode'] === 'teacher') return q['mode'] as Mode;
+    if (q['mode'] === 'class' || q['mode'] === 'teacher' || q['mode'] === 'child') return q['mode'] as Mode;
     return this.modes()[0]?.value ?? 'mine';
   });
   protected readonly classId = computed(() => this.query()['class'] ?? '');
@@ -203,6 +205,7 @@ export class SchedulePage {
     void this.school.loadSubjects().catch(() => undefined);
     effect(() => {
       this.query();
+      this.auth.child();
       untracked(() => void this.load());
     });
   }
@@ -220,6 +223,7 @@ export class SchedulePage {
     const date = this.date();
     let path = '';
     if (mode === 'mine') path = '/schedule/me';
+    if (mode === 'child') path = `/schedule/me?child=${encodeURIComponent(this.auth.child()?.accountId ?? '')}`;
     if (mode === 'class') {
       // Классному руководителю логично сразу открыть его класс.
       const id = this.classId() || this.auth.homeroomIds()[0] || '';
