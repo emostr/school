@@ -56,7 +56,9 @@ export class ClassesService {
       where: {
         schoolId,
         ...(includeArchived ? {} : { archivedAt: null }),
-        ...(isStaff(viewer) ? {} : { id: viewer.studentClassId ?? '-' }),
+        ...(isStaff(viewer)
+          ? {}
+          : { id: { in: [viewer.studentClassId, ...viewer.children.map((c) => c.classId)].filter((id): id is string => Boolean(id)) } }),
       },
       orderBy: [{ number: 'asc' }, { letter: 'asc' }, { archivedAt: 'desc' }],
       include: ROW_INCLUDE,
@@ -108,7 +110,19 @@ export class ClassesService {
           where: { archivedAt: null },
           orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
           include: {
-            account: { select: { id: true, login: true, privileges: true, blockedAt: true, mustChangePassword: true } },
+            account: {
+              select: {
+                id: true,
+                login: true,
+                privileges: true,
+                blockedAt: true,
+                mustChangePassword: true,
+                parents: {
+                  where: { parent: { deletedAt: null } },
+                  select: { parent: { select: { id: true, fullName: true, login: true, mustChangePassword: true } } },
+                },
+              },
+            },
           },
         },
       },
@@ -132,6 +146,7 @@ export class ClassesService {
               login: s.account?.login ?? null,
               blocked: Boolean(s.account?.blockedAt),
               mustChangePassword: Boolean(s.account?.mustChangePassword),
+              parents: (s.account?.parents ?? []).map((link) => link.parent),
             }
           : {}),
       })),
