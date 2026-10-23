@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SchoolService } from './school.service';
 import { RequestAccount } from '../common/types';
@@ -34,7 +34,31 @@ export class AccessService {
   }
 
   canViewClass(account: RequestAccount, classId: string): boolean {
-    return isStaff(account) || account.studentClassId === classId;
+    return (
+      isStaff(account) ||
+      account.studentClassId === classId ||
+      account.children.some((child) => child.classId === classId)
+    );
+  }
+
+  /**
+   * Чьи «мои» данные показывать: ученику — свои, родителю — выбранного
+   * ребёнка (по умолчанию первого). Сотруднику-родителю — тоже ребёнка.
+   */
+  learner(account: RequestAccount, childAccountId?: string): { accountId: string; classId: string | null; studentId: string | null } {
+    if (account.studentClassId || has(account, 'STUDENT')) {
+      return { accountId: account.id, classId: account.studentClassId, studentId: account.studentId };
+    }
+    if (account.children.length) {
+      const child = childAccountId
+        ? account.children.find((item) => item.accountId === childAccountId)
+        : account.children[0];
+      if (!child) {
+        throw new ForbiddenException('Это не ваш ребёнок');
+      }
+      return child;
+    }
+    throw new BadRequestException('Учётная запись не привязана ни к ученику, ни к классу');
   }
 
   async assertViewClass(account: RequestAccount, classId: string): Promise<void> {
@@ -128,6 +152,28 @@ export class AccessService {
   }
 
   /**
+   * Оценки ставит учитель предмета и завуч. Классный руководитель журнал
+   * своего класса видит целиком, но чужим предметам оценок не ставит.
+   */
+  async canGrade(account: RequestAccount, classId: string, subjectId: string, date?: Date): Promise<boolean> {
+    if (isHead(account)) {
+      return true;
+    }
+    return has(account, 'TEACHER') && this.teaches(account.id, classId, subjectId, date);
+  }
+
+  async assertGrade(account: RequestAccount, classId: string, subjectId: string, date?: Date): Promise<void> {
+    await this.requireClass(classId);
+    if (!(await this.canGrade(account, classId, subjectId, date))) {
+      throw new ForbiddenException('Оценки по этому предмету ставит его учитель');
+    }
+  }
+
+  async canViewJournal(account: RequestAccount, classId: string, subjectId: string): Promise<boolean> {
+    return isHead(account) || isHomeroomOf(account, classId) || this.canGrade(account, classId, subjectId);
+  }
+
+  /**
    * Куда учётная запись может публиковать: классы и предметы для формы
    * задания или конспекта. null у предметов — «любой предмет».
    */
@@ -150,44 +196,72 @@ export class AccessService {
     }
 
     if (has(account, 'TEACHER')) {
-      const today = await this.school.today();
-      const lessons = await this.prisma.scheduleLesson.findMany({
-        where: { teacherId: account.id, version: { class: { archivedAt: null } } },
-        select: { subjectId: true, version: { select: { id: true, classId: true, validFrom: true } } },
-      });
-      // Учитываем только действующие версии: в старой сетке учитель мог вести
-      // класс, который давно отдал коллеге.
-      const versions = await this.prisma.scheduleVersion.findMany({
-        where: { classId: { in: [...new Set(lessons.map((l) => l.version.classId))] }, validFrom: { lte: today } },
-        orderBy: { validFrom: 'desc' },
-        select: { id: true, classId: true },
-      });
-      const current = new Map<string, string>();
-      for (const version of versions) {
-        if (!current.has(version.classId)) {
-          current.set(version.classId, version.id);
-        }
-      }
-      // Будущие версии тоже считаем: учитель готовит задания к новой сетке заранее.
-      for (const lesson of lessons) {
-        const isCurrent = current.get(lesson.version.classId) === lesson.version.id;
-        const isFuture = lesson.version.validFrom > today;
-        if (!isCurrent && !isFuture) {
-          continue;
-        }
-        const existing = targets.get(lesson.version.classId);
+      for (const [classId, subjects] of await this.teacherSubjects(account.id)) {
+        const existing = targets.get(classId);
         if (existing === null) {
           continue;
         }
-        const set = existing ?? new Set<string>();
-        set.add(lesson.subjectId);
-        targets.set(lesson.version.classId, set);
+        targets.set(classId, new Set([...(existing ?? []), ...subjects]));
       }
     }
 
     return [...targets.entries()].map(([classId, subjects]) => ({
       classId,
       subjectIds: subjects ? [...subjects] : null,
+    }));
+  }
+
+  /**
+   * Какие предметы в каких классах ведёт учитель — по действующей и
+   * запланированным сеткам. В старой сетке учитель мог вести класс, который
+   * давно отдал коллеге, — её не считаем.
+   */
+  async teacherSubjects(accountId: string): Promise<Map<string, Set<string>>> {
+    const today = await this.school.today();
+    const lessons = await this.prisma.scheduleLesson.findMany({
+      where: { teacherId: accountId, version: { class: { archivedAt: null } } },
+      select: { subjectId: true, version: { select: { id: true, classId: true, validFrom: true } } },
+    });
+    const versions = await this.prisma.scheduleVersion.findMany({
+      where: { classId: { in: [...new Set(lessons.map((l) => l.version.classId))] }, validFrom: { lte: today } },
+      orderBy: { validFrom: 'desc' },
+      select: { id: true, classId: true },
+    });
+    const current = new Map<string, string>();
+    for (const version of versions) {
+      if (!current.has(version.classId)) {
+        current.set(version.classId, version.id);
+      }
+    }
+    const result = new Map<string, Set<string>>();
+    for (const lesson of lessons) {
+      const isCurrent = current.get(lesson.version.classId) === lesson.version.id;
+      const isFuture = lesson.version.validFrom > today;
+      if (!isCurrent && !isFuture) {
+        continue;
+      }
+      const set = result.get(lesson.version.classId) ?? new Set<string>();
+      set.add(lesson.subjectId);
+      result.set(lesson.version.classId, set);
+    }
+    return result;
+  }
+
+  /** Куда ставить оценки: завучу — всё, учителю — его предметы. null — любой предмет. */
+  async gradeTargets(account: RequestAccount): Promise<{ classId: string; subjectIds: string[] | null }[]> {
+    if (isHead(account)) {
+      const classes = await this.prisma.schoolClass.findMany({
+        where: { schoolId: await this.school.id(), archivedAt: null },
+        select: { id: true },
+      });
+      return classes.map((item) => ({ classId: item.id, subjectIds: null }));
+    }
+    if (!has(account, 'TEACHER')) {
+      return [];
+    }
+    return [...(await this.teacherSubjects(account.id)).entries()].map(([classId, subjects]) => ({
+      classId,
+      subjectIds: [...subjects],
     }));
   }
 }
