@@ -223,14 +223,12 @@ export class AttendanceService {
   }
 
   /** Своя посещаемость ученика: только пропуски, присутствие не интересно. */
-  async mine(viewer: RequestAccount, fromValue?: string, toValue?: string) {
-    if (!viewer.studentClassId) {
-      throw new BadRequestException('Вы не прикреплены к классу');
-    }
+  async mine(viewer: RequestAccount, fromValue?: string, toValue?: string, child?: string) {
+    const learner = this.access.learner(viewer, child);
     const today = await this.school.today();
     const from = isValidDay(fromValue) ? parseDay(fromValue) : addDays(today, -30);
     const to = isValidDay(toValue) ? parseDay(toValue) : today;
-    const memberships = await this.prisma.student.findMany({ where: { accountId: viewer.id }, select: { id: true } });
+    const memberships = await this.prisma.student.findMany({ where: { accountId: learner.accountId }, select: { id: true } });
     const marks = await this.prisma.attendance.findMany({
       where: {
         studentId: { in: memberships.map((item) => item.id) },
