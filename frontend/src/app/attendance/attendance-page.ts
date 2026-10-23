@@ -12,7 +12,7 @@ import { Icon } from '../ui/icon';
 import { Dots } from '../ui/dots';
 import { Empty } from '../ui/empty';
 
-type Tab = 'lesson' | 'sheet';
+type Tab = 'lesson' | 'sheet' | 'child';
 
 const STATUSES: { value: AttendanceStatus; short: string; label: string; tone: string }[] = [
   { value: 'PRESENT', short: 'П', label: 'присутствует', tone: 'bg-success' },
@@ -31,7 +31,13 @@ const STATUSES: { value: AttendanceStatus; short: string; label: string; tone: s
         <nav class="es-pivot mb-5">
           <button type="button" [class.is-active]="tab() === 'lesson'" (click)="navigate({ tab: 'lesson' })">отметить урок</button>
           <button type="button" [class.is-active]="tab() === 'sheet'" (click)="navigate({ tab: 'sheet' })">табель</button>
+          @if (auth.isParent()) {
+            <button type="button" [class.is-active]="tab() === 'child'" (click)="navigate({ tab: 'child' })">{{ auth.child()?.firstName }}</button>
+          }
         </nav>
+      }
+
+      @if (auth.isStaff() && tab() !== 'child') {
 
         <div class="mb-6 flex flex-wrap items-end gap-3">
           <div>
@@ -264,7 +270,10 @@ export class AttendancePage {
   protected readonly mine = signal<MyAttendance | null>(null);
   protected readonly busy = signal(false);
 
-  protected readonly tab = computed<Tab>(() => (this.query()['tab'] === 'sheet' ? 'sheet' : 'lesson'));
+  protected readonly tab = computed<Tab>(() => {
+    const tab = this.query()['tab'];
+    return tab === 'sheet' || tab === 'child' ? tab : 'lesson';
+  });
   protected readonly classId = computed(() => this.query()['class'] || this.auth.homeroomIds()[0] || '');
   protected readonly date = computed(() => this.query()['date'] || this.school.today());
   protected readonly lessonNumber = computed(() => Number(this.query()['lesson'] || 0));
@@ -272,7 +281,10 @@ export class AttendancePage {
   protected readonly to = computed(() => this.query()['to'] || this.school.today());
   protected readonly dayLessons = computed(() => (this.day()?.lessons ?? []).filter((lesson) => lesson.status !== 'cancelled'));
   protected readonly subtitle = computed(() => {
-    if (!this.auth.isStaff()) return this.auth.profile()?.studentClass?.name ?? '';
+    if (!this.auth.isStaff() || this.tab() === 'child') {
+      const child = this.auth.isParent() ? this.auth.child() : null;
+      return child ? `${child.fullName}${child.className ? ', ' + child.className : ''}` : (this.auth.profile()?.studentClass?.name ?? '');
+    }
     return this.school.classes().find((item) => item.id === this.classId())?.name ?? '';
   });
   protected readonly absentLabel = computed(() => {
@@ -293,6 +305,7 @@ export class AttendancePage {
     }
     effect(() => {
       const query = this.query();
+      this.auth.child();
       untracked(() => void this.load(query));
     });
   }
@@ -303,8 +316,10 @@ export class AttendancePage {
 
   private async load(_query: Record<string, string>): Promise<void> {
     try {
-      if (!this.auth.isStaff()) {
-        this.mine.set(await this.api.get<MyAttendance>('/attendance/me', { from: this.from(), to: this.to() }));
+      if (!this.auth.isStaff() || this.tab() === 'child') {
+        this.mine.set(
+          await this.api.get<MyAttendance>('/attendance/me', { from: this.from(), to: this.to(), child: this.auth.childParam() }),
+        );
         return;
       }
       const classId = this.classId();
