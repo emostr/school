@@ -77,6 +77,24 @@ const TIMEZONES = [
             </table>
             <button type="button" class="es-btn es-btn-sm mt-3" (click)="addBell()"><es-icon name="plus" [size]="16" /> урок</button>
             <p class="es-hint mt-3">Нулевой урок — номер 0. Время уроков подставляется в расписание всех классов.</p>
+
+            <h2 class="es-subtitle mt-10 mb-4">учебные периоды</h2>
+            @for (period of f.periods; track $index; let i = $index) {
+              <div class="mb-2 grid grid-cols-[1fr_auto_auto_auto] gap-2">
+                <input class="es-input" placeholder="1 четверть" [(ngModel)]="period.title" aria-label="Название периода" />
+                <input type="date" class="es-input" [(ngModel)]="period.from" aria-label="С" />
+                <input type="date" class="es-input" [(ngModel)]="period.to" aria-label="По" />
+                <button type="button" class="es-btn es-btn-ghost es-btn-icon hover:!text-danger" title="Убрать" (click)="f.periods.splice(i, 1)"><es-icon name="close" [size]="16" /></button>
+              </div>
+            }
+            <div class="mt-3 flex flex-wrap gap-2">
+              <button type="button" class="es-btn es-btn-sm" (click)="addPeriod()"><es-icon name="plus" [size]="16" /> период</button>
+              @if (!f.periods.length) {
+                <button type="button" class="es-btn es-btn-sm" (click)="presetQuarters()">четверти</button>
+                <button type="button" class="es-btn es-btn-sm" (click)="presetTrimesters()">триместры</button>
+              }
+            </div>
+            <p class="es-hint mt-3">По периодам журнал считает средние баллы, а дневник и табель предлагают их в выборе дат.</p>
           </section>
         </div>
       }
@@ -95,7 +113,9 @@ export class AdminSchoolPage {
   constructor() {
     void this.api
       .get<SchoolInfo>('/admin/school')
-      .then((info) => this.form.set({ ...info, bells: info.bells.map((bell) => ({ ...bell })) }))
+      .then((info) =>
+        this.form.set({ ...info, bells: info.bells.map((bell) => ({ ...bell })), periods: (info.periods ?? []).map((p) => ({ ...p })) }),
+      )
       .catch((error) => this.notify.error(error));
   }
 
@@ -113,6 +133,38 @@ export class AdminSchoolPage {
         ? { number: last.number + 1, start: shift(last.end, 10), end: shift(last.end, 55) }
         : { number: 1, start: '08:30', end: '09:15' },
     );
+  }
+
+  private schoolYear(): number {
+    const today = this.school.today();
+    return Number(today.slice(0, 4)) - (Number(today.slice(5, 7)) < 8 ? 1 : 0);
+  }
+
+  protected addPeriod(): void {
+    const form = this.form();
+    if (!form) return;
+    const last = form.periods.at(-1);
+    form.periods.push({ title: `${form.periods.length + 1} период`, from: last?.to ?? `${this.schoolYear()}-09-01`, to: last?.to ?? '' });
+  }
+
+  /** Заготовки — даты примерные, их обычно поправляют под приказ школы. */
+  protected presetQuarters(): void {
+    const y = this.schoolYear();
+    this.form()!.periods = [
+      { title: '1 четверть', from: `${y}-09-01`, to: `${y}-10-25` },
+      { title: '2 четверть', from: `${y}-11-05`, to: `${y}-12-28` },
+      { title: '3 четверть', from: `${y + 1}-01-09`, to: `${y + 1}-03-22` },
+      { title: '4 четверть', from: `${y + 1}-04-01`, to: `${y + 1}-05-26` },
+    ];
+  }
+
+  protected presetTrimesters(): void {
+    const y = this.schoolYear();
+    this.form()!.periods = [
+      { title: '1 триместр', from: `${y}-09-01`, to: `${y}-11-30` },
+      { title: '2 триместр', from: `${y}-12-01`, to: `${y + 1}-02-28` },
+      { title: '3 триместр', from: `${y + 1}-03-01`, to: `${y + 1}-05-31` },
+    ];
   }
 
   protected removeBell(index: number): void {
