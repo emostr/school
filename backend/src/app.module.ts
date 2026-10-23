@@ -14,6 +14,7 @@ import { AttachmentsModule } from './attachments/attachments.module';
 import { HomeworkModule } from './homework/homework.module';
 import { NotesModule } from './notes/notes.module';
 import { AttendanceModule } from './attendance/attendance.module';
+import { GradebookModule } from './gradebook/gradebook.module';
 import { TestsModule } from './tests/tests.module';
 import { AssignmentsModule } from './assignments/assignments.module';
 import { WorksModule } from './works/works.module';
@@ -43,6 +44,7 @@ import { SetupGuard } from './common/guards/setup.guard';
     HomeworkModule,
     NotesModule,
     AttendanceModule,
+    GradebookModule,
     TestsModule,
     AssignmentsModule,
     WorksModule,
