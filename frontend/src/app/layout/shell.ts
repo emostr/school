@@ -40,6 +40,21 @@ interface NavItem {
           </span>
         </a>
 
+        @if (auth.isParent()) {
+          <div class="mx-4 mb-2 border border-white/15 p-2">
+            <label class="block px-1 text-[11px] font-semibold text-white/50" for="child-switch">смотрю за</label>
+            @if (auth.children().length > 1) {
+              <select id="child-switch" class="mt-1 w-full border-0 bg-transparent px-1 py-0.5 text-sm text-white outline-none [&>option]:text-black" [value]="auth.child()?.accountId" (change)="switchChild($event)">
+                @for (child of auth.children(); track child.accountId) {
+                  <option [value]="child.accountId">{{ child.firstName }}{{ child.className ? ', ' + child.className : '' }}</option>
+                }
+              </select>
+            } @else {
+              <p id="child-switch" class="mt-0.5 px-1 text-sm">{{ auth.child()?.fullName }}{{ auth.child()?.className ? ', ' + auth.child()?.className : '' }}</p>
+            }
+          </div>
+        }
+
         <nav class="flex-1 overflow-y-auto py-2">
           @for (item of nav(); track item.link) {
             <a
@@ -122,7 +137,7 @@ interface NavItem {
   `,
 })
 export class Shell {
-  private readonly auth = inject(Auth);
+  protected readonly auth = inject(Auth);
   private readonly school = inject(School);
   private readonly notify = inject(Notify);
   private readonly router = inject(Router);
@@ -151,6 +166,9 @@ export class Shell {
     if (p.privileges.includes('STUDENT')) {
       parts.push(`${p.privileges.includes('TRUSTED') ? 'доверенный ученик' : 'ученик'}${p.studentClass ? ` ${p.studentClass.name}` : ''}`);
     }
+    if (p.privileges.includes('PARENT')) {
+      parts.push('родитель');
+    }
     return parts.join(' · ');
   });
 
@@ -168,8 +186,14 @@ export class Shell {
       { label: 'задания', icon: 'clipboard', link: '/homework' },
       { label: 'конспекты', icon: 'book', link: '/notes' },
     ];
-    if (this.auth.isStaff() || this.auth.isStudent()) {
+    if (this.auth.isStaff() || this.auth.isLearner()) {
       items.push({ label: 'посещаемость', icon: 'userCheck', link: '/attendance' });
+    }
+    if (this.auth.isLearner()) {
+      items.push({ label: 'оценки', icon: 'award', link: '/diary' });
+    }
+    if (this.auth.isStaff()) {
+      items.push({ label: 'журнал', icon: 'table', link: '/journal' });
     }
     if (this.auth.isStaff()) {
       items.push({ label: 'тесты', icon: 'clipboardCheck', link: '/tests' });
@@ -186,6 +210,12 @@ export class Shell {
 
   constructor() {
     void this.school.loadInfo().catch(() => undefined);
+  }
+
+  protected switchChild(event: Event): void {
+    this.auth.selectChild((event.target as HTMLSelectElement).value);
+    // Страница перечитает данные уже за другого ребёнка.
+    void this.router.navigateByUrl(this.router.url.split('?')[0] === '/' ? '/' : this.router.url.split('?')[0]);
   }
 
   protected async logout(): Promise<void> {
