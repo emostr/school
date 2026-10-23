@@ -153,7 +153,7 @@ export class HomeworkPage {
   protected readonly archiveSearch = signal('');
 
   protected readonly classId = computed(
-    () => this.query()['class'] || this.auth.profile()?.studentClass?.id || this.auth.homeroomIds()[0] || '',
+    () => this.query()['class'] || this.auth.learnerClassId() || this.auth.homeroomIds()[0] || '',
   );
   protected readonly date = computed(() => this.query()['date'] || this.school.today());
   protected readonly className = computed(() => this.school.classes().find((item) => item.id === this.classId())?.name ?? '');
