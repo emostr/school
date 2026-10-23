@@ -28,6 +28,8 @@ export interface RequestAccount {
   /** Действующий класс ученика и его место в нём. */
   studentClassId: string | null;
   studentId: string | null;
+  /** Дети родителя: учётная запись, действующий класс и место в нём. */
+  children: { accountId: string; classId: string | null; studentId: string | null }[];
 }
 
 export const SESSION_COOKIE = 'edway_session';
