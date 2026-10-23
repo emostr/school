@@ -13,7 +13,7 @@ import { Flyout } from '../ui/flyout';
 import { Credentials } from '../ui/credentials';
 import { PRIVILEGE_LABELS, PRIVILEGE_TONES, sortPrivileges } from '../ui/privileges';
 
-type Filter = '' | 'STUDENT' | 'STAFF' | 'HEAD';
+type Filter = '' | 'STUDENT' | 'STAFF' | 'HEAD' | 'PARENT';
 
 interface Form {
   id: string | null;
@@ -21,11 +21,12 @@ interface Form {
   firstName: string;
   middleName: string;
   subject: string;
-  kind: 'student' | 'staff';
+  kind: 'student' | 'staff' | 'parent';
   teacher: boolean;
   head: boolean;
   trusted: boolean;
   classId: string;
+  children: { id: string; fullName: string; className: string | null }[];
 }
 
 const emptyForm = (): Form => ({
@@ -39,6 +40,7 @@ const emptyForm = (): Form => ({
   head: false,
   trusted: false,
   classId: '',
+  children: [],
 });
 
 @Component({
@@ -91,7 +93,12 @@ const emptyForm = (): Form => ({
                       }
                     </span>
                   </td>
-                  <td>{{ row.studentClass?.name ?? '' }}</td>
+                  <td>
+                    {{ row.studentClass?.name ?? '' }}
+                    @for (child of row.children; track child.id) {
+                      <span class="block text-xs text-muted">→ {{ child.fullName }}{{ child.className ? ', ' + child.className : '' }}</span>
+                    }
+                  </td>
                   <td class="text-xs text-muted">
                     @if (row.blocked) {
                       <span class="es-badge es-badge-danger">заблокирован</span>
@@ -139,9 +146,10 @@ const emptyForm = (): Form => ({
       @if (form(); as f) {
         <form id="account-form" class="space-y-4" (ngSubmit)="save()">
           @if (!f.id) {
-            <div class="grid grid-cols-2 gap-1">
+            <div class="grid grid-cols-3 gap-1">
               <button type="button" class="es-btn" [class.es-btn-primary]="f.kind === 'staff'" (click)="f.kind = 'staff'">сотрудник</button>
               <button type="button" class="es-btn" [class.es-btn-primary]="f.kind === 'student'" (click)="f.kind = 'student'">ученик</button>
+              <button type="button" class="es-btn" [class.es-btn-primary]="f.kind === 'parent'" (click)="f.kind = 'parent'">родитель</button>
             </div>
           }
           <div>
@@ -172,7 +180,7 @@ const emptyForm = (): Form => ({
               <label class="es-label" for="acc-subject">предмет (подпись)</label>
               <input id="acc-subject" name="subject" class="es-input" placeholder="например: математика и информатика" [(ngModel)]="f.subject" />
             </div>
-          } @else {
+          } @else if (f.kind === 'student') {
             @if (!f.id) {
               <div>
                 <label class="es-label" for="acc-class">класс</label>
@@ -185,6 +193,26 @@ const emptyForm = (): Form => ({
               </div>
             }
             <label class="flex items-center gap-2"><input type="checkbox" name="trusted" class="es-check" [(ngModel)]="f.trusted" /> доверенный ученик — публикует задания и конспекты класса</label>
+          }
+          @if (f.kind === 'parent' || (f.id && f.kind === 'staff')) {
+            <div>
+              <span class="es-label">{{ f.kind === 'parent' ? 'дети' : 'дети в школе (если сотрудник — ещё и родитель)' }}</span>
+              @for (child of f.children; track child.id) {
+                <div class="mb-1 flex items-center justify-between gap-2 bg-surface-2 px-3 py-2 text-sm">
+                  <span>{{ child.fullName }}{{ child.className ? ', ' + child.className : '' }}</span>
+                  <button type="button" class="text-faint hover:text-danger" title="Отвязать" (click)="removeChild(f, child.id)"><es-icon name="close" [size]="16" /></button>
+                </div>
+              }
+              <div class="relative mt-2">
+                <es-icon name="search" [size]="16" class="absolute top-1/2 left-3 -translate-y-1/2 text-faint" />
+                <input name="child-search" class="es-input pl-9" placeholder="найти ученика по фамилии" [ngModel]="childSearch()" (ngModelChange)="searchChildren($event)" />
+              </div>
+              @for (found of childResults(); track found.id) {
+                <button type="button" class="block w-full border-b border-line px-3 py-2 text-left text-sm hover:bg-surface-3" (click)="addChild(f, found)">
+                  {{ found.fullName }} <span class="text-faint">{{ found.studentClass?.name ?? '' }}</span>
+                </button>
+              }
+            </div>
           }
           @if (!f.id) {
             <p class="es-hint">Логин составится из фамилии и инициалов, временный пароль покажем после сохранения.</p>
@@ -224,6 +252,7 @@ export class PeoplePage {
     { value: 'STAFF', label: 'сотрудники' },
     { value: 'HEAD', label: 'завучи' },
     { value: 'STUDENT', label: 'ученики' },
+    { value: 'PARENT', label: 'родители' },
   ];
   protected readonly rows = signal<AccountRow[]>([]);
   protected readonly loading = signal(true);
@@ -234,6 +263,9 @@ export class PeoplePage {
   protected readonly form = signal<Form | null>(null);
   protected readonly issued = signal<IssuedCredentials[]>([]);
   protected readonly moving = signal<AccountRow | null>(null);
+  protected readonly childSearch = signal('');
+  protected readonly childResults = signal<AccountRow[]>([]);
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
   protected moveTo = '';
 
   protected readonly visible = computed(() => {
@@ -283,31 +315,87 @@ export class PeoplePage {
   }
 
   protected openCreate(): void {
+    this.childSearch.set('');
+    this.childResults.set([]);
     this.form.set(emptyForm());
+  }
+
+  protected searchChildren(value: string): void {
+    this.childSearch.set(value);
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    if (value.trim().length < 2) {
+      this.childResults.set([]);
+      return;
+    }
+    this.searchTimer = setTimeout(async () => {
+      try {
+        const rows = await this.api.get<AccountRow[]>('/accounts', { privilege: 'STUDENT', search: value.trim() });
+        this.childResults.set(rows.slice(0, 8));
+      } catch {
+        this.childResults.set([]);
+      }
+    }, 250);
+  }
+
+  /** У новой записи дети копятся в форме, у существующей — привязываются сразу. */
+  protected async addChild(form: Form, child: AccountRow): Promise<void> {
+    if (form.children.some((item) => item.id === child.id)) return;
+    const entry = { id: child.id, fullName: child.fullName, className: child.studentClass?.name ?? null };
+    if (form.id) {
+      try {
+        await this.api.post(`/accounts/${form.id}/children`, { childId: child.id });
+        await this.load();
+      } catch (error) {
+        this.notify.error(error);
+        return;
+      }
+    }
+    form.children = [...form.children, entry];
+    this.childSearch.set('');
+    this.childResults.set([]);
+  }
+
+  protected async removeChild(form: Form, childId: string): Promise<void> {
+    if (form.id) {
+      try {
+        await this.api.delete(`/accounts/${form.id}/children/${childId}`);
+        await this.load();
+      } catch (error) {
+        this.notify.error(error);
+        return;
+      }
+    }
+    form.children = form.children.filter((item) => item.id !== childId);
   }
 
   protected openEdit(row: AccountRow): void {
     this.menu.set(null);
     const student = row.privileges.includes('STUDENT');
+    const staff = row.privileges.some((p) => p === 'TEACHER' || p === 'HEAD');
+    this.childSearch.set('');
+    this.childResults.set([]);
     this.form.set({
       id: row.id,
       lastName: row.lastName,
       firstName: row.firstName,
       middleName: row.middleName,
       subject: row.subject,
-      kind: student ? 'student' : 'staff',
+      kind: student ? 'student' : staff ? 'staff' : 'parent',
       teacher: row.privileges.includes('TEACHER'),
       head: row.privileges.includes('HEAD'),
       trusted: row.privileges.includes('TRUSTED'),
       classId: row.studentClass?.id ?? '',
+      children: row.children,
     });
   }
 
   private privilegesOf(form: Form): Privilege[] {
     if (form.kind === 'student') return form.trusted ? ['STUDENT', 'TRUSTED'] : ['STUDENT'];
+    if (form.kind === 'parent') return ['PARENT'];
     const list: Privilege[] = [];
     if (form.teacher) list.push('TEACHER');
     if (form.head) list.push('HEAD');
+    if (form.children.length) list.push('PARENT');
     return list;
   }
 
@@ -317,6 +405,10 @@ export class PeoplePage {
     const privileges = this.privilegesOf(form);
     if (!privileges.length) {
       this.notify.error('Отметьте хотя бы одну привилегию');
+      return;
+    }
+    if (form.kind === 'parent' && !form.id && !form.children.length) {
+      this.notify.error('Выберите хотя бы одного ребёнка');
       return;
     }
     this.busy.set(true);
@@ -335,6 +427,7 @@ export class PeoplePage {
         const credentials = await this.api.post<IssuedCredentials>('/accounts', {
           ...body,
           ...(form.kind === 'student' ? { classId: form.classId } : {}),
+          ...(form.kind === 'parent' ? { childIds: form.children.map((child) => child.id) } : {}),
         });
         this.issued.set([credentials]);
       }
