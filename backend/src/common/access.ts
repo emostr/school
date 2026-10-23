@@ -16,6 +16,10 @@ export function isStaff(account: Pick<RequestAccount, 'privileges'>): boolean {
   return STAFF.some((privilege) => has(account, privilege));
 }
 
+export function isParent(account: Pick<RequestAccount, 'privileges'>): boolean {
+  return has(account, 'PARENT');
+}
+
 export function isHomeroomOf(account: Pick<RequestAccount, 'homeroomClassIds'>, classId: string): boolean {
   return account.homeroomClassIds.includes(classId);
 }
@@ -47,11 +51,13 @@ export function setupStep(account: {
 export function normalizePrivileges(input: Privilege[]): Privilege[] {
   const set = new Set(input);
   if (set.has('STUDENT')) {
+    // Ученик не бывает ни сотрудником, ни родителем.
     set.delete('TEACHER');
     set.delete('HEAD');
+    set.delete('PARENT');
   } else {
     set.delete('TRUSTED');
   }
-  const order: Privilege[] = ['STUDENT', 'TRUSTED', 'TEACHER', 'HEAD'];
+  const order: Privilege[] = ['STUDENT', 'TRUSTED', 'TEACHER', 'HEAD', 'PARENT'];
   return order.filter((privilege) => set.has(privilege));
 }
